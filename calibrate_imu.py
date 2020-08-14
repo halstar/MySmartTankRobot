@@ -2,7 +2,7 @@ import os
 import json
 import imu
 
-SETUP_FILE = 'setup.json'
+from globals import *
 
 CALIBRATION_LOOP_COUNT = 10000
 
@@ -27,7 +27,7 @@ def main():
     imu_device.reset        ()
     imu_device.reset_offsets()
 
-    imu_device.print_imu_info()
+    imu_device.print_info()
 
     x_acceleration_measure = 0
     y_acceleration_measure = 0
@@ -40,7 +40,7 @@ def main():
     print("  ")
 
     for i in range(0, CALIBRATION_LOOP_COUNT):
-        print("\b" + MOVING_STAR_PATTERN[i % 4], end="", flush=True)
+        print("\b" + MOVING_STAR_PATTERN[i % 4], end = '', flush = True)
 
         imu_device.read_acceleration_data()
         imu_device.read_gyroscope_data   ()
@@ -77,7 +77,7 @@ def main():
     imu_device.set_y_gyroscope_offset(y_gyroscope_offset)
     imu_device.set_z_gyroscope_offset(z_gyroscope_offset)
 
-    imu_device.print_imu_info()
+    imu_device.print_info()
 
     setup_data['ACCELERATION_X_OFFSET'] = x_acceleration_offset
     setup_data['ACCELERATION_Y_OFFSET'] = y_acceleration_offset
@@ -95,6 +95,7 @@ def main():
     print("| IMU calibration done!  | ")
     print("\/\/\/\/\/\/\/\/\/\/\/\/\/ ")
     print("")
+
 
 if __name__ == '__main__':
 

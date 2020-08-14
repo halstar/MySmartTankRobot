@@ -1,16 +1,15 @@
 import io
 import socketserver
-from threading import Condition
-from http import server
 
-IMAGE_WIDTH  = "360"
-IMAGE_HEIGHT = "240"
+from threading import Condition
+from http      import server
+from log       import *
 
 PAGE = """\
 <html>
 <head/>
 <body>
-<center><img src="stream.mjpg" width="{IMAGE_WIDTH}" height="{IMAGE_HEIGHT}"></center>
+<center><img src="stream.mjpg"></center>
 </body>
 </html>
 """
@@ -71,7 +70,9 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     self.wfile.write(frame)
                     self.wfile.write(b'\r\n')
             except Exception as e:
-                pass
+                log(ERROR, 'Streaming server exception')
+                log(ERROR, e                           )
+
         else:
             self.send_error(404)
             self.end_headers()

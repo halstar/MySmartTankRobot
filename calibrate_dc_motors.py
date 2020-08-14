@@ -1,6 +1,8 @@
 import os
 import json
-import motor
+import dcmotor
+
+from globals import *
 
 LEFT_MOTOR_ENABLE = 16
 LEFT_MOTOR_PIN_1  = 20
@@ -26,8 +28,8 @@ def main():
     with open(SETUP_FILE, 'r') as json_file:
         setup_data = json.load(json_file)
 
-    left_motor  = motor.Motor(LEFT_MOTOR_ENABLE , LEFT_MOTOR_PIN_1 , LEFT_MOTOR_PIN_2 , 0)
-    right_motor = motor.Motor(RIGHT_MOTOR_ENABLE, RIGHT_MOTOR_PIN_1, RIGHT_MOTOR_PIN_2, 0)
+    left_motor  = dcmotor.DcMotor(USE_RPI_GPIO, LEFT_MOTOR_ENABLE , LEFT_MOTOR_PIN_1 , LEFT_MOTOR_PIN_2 , 0)
+    right_motor = dcmotor.DcMotor(USE_RPI_GPIO, RIGHT_MOTOR_ENABLE, RIGHT_MOTOR_PIN_1, RIGHT_MOTOR_PIN_2, 0)
 
     speed_value   = 0
     is_motor_done = False
@@ -35,7 +37,7 @@ def main():
     while not is_motor_done:
 
         left_motor.forward(speed_value)
-        print("Left motor speed: {}. Hit Enter if motor is not moving, else type OK: ".format(speed_value), end="", flush=True)
+        print("Left motor speed: {}. Hit Enter if motor is not moving, else type OK: ".format(speed_value), end = '', flush = True)
         user_input = input()
         if user_input == 'OK':
             is_motor_done = True
@@ -43,7 +45,7 @@ def main():
         else:
             speed_value += 1
 
-    setup_data['LEFT_MOTOR_OFFSET'] = speed_value
+    setup_data['DC_MOTOR_LEFT_OFFSET'] = speed_value
 
     speed_value   = 0
     is_motor_done = False
@@ -53,7 +55,7 @@ def main():
     while not is_motor_done:
 
         right_motor.forward(speed_value)
-        print("Right motor speed: {}. Hit Enter if motor is not moving, else type OK: ".format(speed_value), end="", flush=True)
+        print("Right motor speed: {}. Hit Enter if motor is not moving, else type OK: ".format(speed_value), end = '', flush = True)
         user_input = input()
         if user_input == 'OK':
             is_motor_done = True
@@ -61,7 +63,7 @@ def main():
         else:
             speed_value += 1
 
-    setup_data['RIGHT_MOTOR_OFFSET'] = speed_value
+    setup_data['DC_MOTOR_RIGHT_OFFSET'] = speed_value
 
     with open(SETUP_FILE, "w") as json_file:
         json.dump(setup_data, json_file, indent=4)

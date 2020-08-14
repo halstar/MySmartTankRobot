@@ -1,11 +1,11 @@
-# MySelfBalancedRobot
+# MySmartTankRobot
 
-A homemade self balanced robot built on a Raspberry Pi 3 B+ basis, with different regular sensors (IMU, ultrasonic), and a camera.
+A homemade smart tank robot built on a Raspberry Pi 3 B+ basis, with different regular sensors (IMU, ultrasonic), and a camera.
 
 This repository gathers sources Python scripts to be executed on the Raspberry Pi.
 
-**Note**: bluetooth may not be installed by default. The following commands might help! 
+**Note**:  gpiozero & pigpio supports were partially tested. For the latter, the following commands might help!
 
-* sudo apt-get install bluetooth bluez libbluetooth-dev
+* sudo pip3 install pigpio
 
-* pip3 install pybluez
+* sudo pigpiod

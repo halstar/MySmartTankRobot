@@ -68,7 +68,6 @@ class ImuDevice:
         self.i2c_device.write_byte(GYRO_CONFIG, 0x00)
 
         # Write sample rate divider register
-        #self.i2c_device.write_byte(SMPLRT_DIV, 0x27)
         self.i2c_device.write_byte(SMPLRT_DIV, 0x04)
 
     def __read_word__(self, register):
@@ -231,7 +230,7 @@ class ImuDevice:
     def get_yaw_rate(self):
         return self.yaw_rate
 
-    def print_imu_info(self):
+    def print_info(self):
 
         print("X / Y / Z acceleration offsets: {} / {} / {}".format(self.acceleration_offset_x, self.acceleration_offset_y, self.acceleration_offset_z))
         print("X / Y / Z gyroscope    offsets: {} / {} / {}".format(self.gyroscope_offset_x   , self.gyroscope_offset_y   , self.gyroscope_offset_z   ))

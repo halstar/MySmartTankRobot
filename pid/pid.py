@@ -84,7 +84,7 @@ class Pid:
 
         return self.computed_value
 
-    def print_pid_info(self):
+    def print_info(self):
 
         print(" kp = {:6.2f} -  ki = {:6.2f} -     kd = {:6.2f}".format(self.kp       , self.ki       , self.kd                ))
         print("  p = {:6.2f} -   i = {:6.2f} -      d = {:6.2f}".format(self.p_value  , self.i_value  , self.d_value           ))
