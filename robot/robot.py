@@ -8,8 +8,6 @@ class Robot:
 
     def __init__(self, setup_data, speed_pid_controller, left_motor, right_motor, left_encoder, right_encoder, imu_device):
 
-        log(INFO, 'Robot >>> initiating HW devices...')
-
         self.speed_pid_controller = speed_pid_controller
 
         self.left_motor  = left_motor

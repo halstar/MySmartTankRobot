@@ -2,8 +2,9 @@ import i2c
 import math
 import time
 
-# MPU6050 I2C bus/address
-IMU_BUS     = 0x01
+from globals import *
+
+# MPU6050 hard coded address
 IMU_ADDRESS = 0x68
 
 # MPU6050 registers
@@ -56,7 +57,7 @@ class ImuDevice:
         self.pitch_rate = 0
         self.yaw_rate   = 0
 
-        self.i2c_device = i2c.I2cDevice(IMU_BUS, IMU_ADDRESS)
+        self.i2c_device = i2c.I2cDevice(I2C_BUS_NUMBER, IMU_ADDRESS)
 
         # Write power management register
         self.i2c_device.write_byte(PWR_MGMT_1, 0x01)

@@ -52,7 +52,7 @@ class PanTilt:
 
     def set_pan(self, pan_angle):
 
-        pan_angle = utils.clamp(pan_angle , PAN_ANGLE_MIN , PAN_ANGLE_MAX)
+        pan_angle = utils.clamp(pan_angle, PAN_ANGLE_MIN , PAN_ANGLE_MAX)
 
         self.pan_servo.set_angle(pan_angle)
 
@@ -60,7 +60,7 @@ class PanTilt:
 
     def set_tilt(self, tilt_angle):
 
-        tilt_angle = utils.clamp(tilt_angle , TILT_ANGLE_MIN , TILT_ANGLE_MAX)
+        tilt_angle = utils.clamp(tilt_angle, TILT_ANGLE_MIN , TILT_ANGLE_MAX)
 
         self.tilt_servo.set_angle(tilt_angle)
 

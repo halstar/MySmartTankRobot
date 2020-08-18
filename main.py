@@ -41,9 +41,6 @@ def run_obstacles_avoidance(robot, front_pan_tilt, front_lidar):
     while (control.main_mode == MODE.AVOID_OBSTACLES) and (control.is_mode_aborted == False):
 
         next_obstacle_distance = front_lidar.get_distance()
-        next_obstacle_distance *= 1000
-
-        next_obstacle_distance = 1.0
 
         speed_samples.put(robot.get_speed())
         number_of_samples += 1
@@ -195,31 +192,29 @@ def scanning_control_thread(pan_tilt, lidar, is_front, data_reporter):
 
             if control.display_mode == DISPLAY.SCAN_2D:
                 log(INFO, '{} 2D scan starting'.format(scan_name))
-                pan_tilt.start_scanning_area(-90, 89, OBSTACLE_FOV, 0, 0, 0)
+                pan_tilt.start_scanning_area(-90, 89, OBSTACLE_STEP, 0, 0, 0)
             else:
                 log(INFO, '{} 3D scan starting'.format(scan_name))
-                pan_tilt.start_scanning_area(-90, 89, OBSTACLE_FOV, 0, 89, OBSTACLE_FOV)
+                pan_tilt.start_scanning_area(-90, 89, OBSTACLE_STEP, -90, 0, OBSTACLE_STEP)
 
             is_scanning_done = False
 
             while (is_scanning_done == False) and (control.display_mode == DISPLAY.SCAN_2D or control.display_mode == DISPLAY.SCAN_3D):
 
                 time.sleep(0.2)
+
                 is_scanning_done, pan_angle, tilt_angle = pan_tilt.step_scanning_area()
 
                 log(DEBUG, '{} scan step: {:6.2f} / {}'.format(scan_name, pan_angle, tilt_angle))
 
-                obstacle_distance  = lidar.get_distance()
-                obstacle_distance *= 1000
-
-                obstacle_distance = 1.0
+                obstacle_distance  = lidar.get_distance() + LIDAR_POSITION_OFFSET
 
                 if is_front == True:
                     pan_angle += 90
                 else:
                     pan_angle += 270
 
-                data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:05.2f}'.format(tilt_angle, pan_angle, obstacle_distance))
+                data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:06.3f}'.format(-tilt_angle, pan_angle, obstacle_distance))
 
                 if (control.is_mode_aborted == True):
                     is_scanning_done = True
@@ -295,26 +290,21 @@ def live_3d_control_thread(front_pan_tilt, front_lidar, back_pan_tilt, back_lida
 
         else:
 
-            obstacle_distance  = front_lidar.get_distance()
-            obstacle_distance *= 1000
-
-            obstacle_distance = 1.0
+            obstacle_distance  = front_lidar.get_distance() + LIDAR_POSITION_OFFSET
 
             pan_angle, tilt_angle = front_pan_tilt.get_position()
             tilt_angle = 0
             pan_angle += 90
 
-            data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:05.2f}'.format(tilt_angle, pan_angle, obstacle_distance))
+            data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:06.3f}'.format(tilt_angle, pan_angle, obstacle_distance))
 
-            obstacle_distance  = back_lidar.get_distance()
-            obstacle_distance *= 1000
-
-            obstacle_distance = 2.0
+            obstacle_distance  = back_lidar.get_distance() + LIDAR_POSITION_OFFSET
 
             pan_angle, tilt_angle = back_pan_tilt.get_position()
+            tilt_angle = 0
             pan_angle += 270
 
-            data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:05.2f}'.format(pan_angle, tilt_angle, obstacle_distance))
+            data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:06.3f}'.format(tilt_angle, pan_angle, obstacle_distance))
 
             time.sleep(0.1)
 
@@ -463,9 +453,6 @@ def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, f
             command = user_input[0:2]
             value   = float(user_input[3:])
 
-            print("command ", command)
-            print("value ", value)
-
             if command == 'fp':
                 front_pan_tilt.set_pan(value)
             elif command == 'ft':
@@ -508,6 +495,8 @@ def main():
 
     print('')
 
+    log(INFO, 'Robot >>> initiating HW devices...')
+
     # Setup motors with their dedicated GPIOs and offsets
     left_motor  = dcmotor.DcMotor(USE_PI_GPIO, LEFT_MOTOR_ENABLE , LEFT_MOTOR_PIN_1 , LEFT_MOTOR_PIN_2 , setup_data['DC_MOTOR_LEFT_OFFSET' ])
     right_motor = dcmotor.DcMotor(USE_PI_GPIO, RIGHT_MOTOR_ENABLE, RIGHT_MOTOR_PIN_1, RIGHT_MOTOR_PIN_2, setup_data['DC_MOTOR_RIGHT_OFFSET'])
@@ -518,8 +507,8 @@ def main():
 
     imu_device             = imu.ImuDevice()
     data_reporter          = remotectrl.DataReporter(setup_data['DATA_REPORTING_PORT'])
-    front_lidar            = lidar.Lidar(FRONT_LIDAR_ADDRESS)
-    back_lidar             = lidar.Lidar(BACK_LIDAR_ADDRESS )
+    front_lidar            = lidar.Lidar('front', FRONT_LIDAR_ADDRESS, FRONT_LIDAR_ENABLE, BACK_LIDAR_ENABLE , True )
+    back_lidar             = lidar.Lidar(' back', BACK_LIDAR_ADDRESS , BACK_LIDAR_ENABLE , FRONT_LIDAR_ENABLE, False)
     front_pan_tilt         = pantilt.PanTilt(FRONT_PAN_CONTROL_PIN, FRONT_TILT_CONTROL_PIN)
     back_pan_tilt          = pantilt.PanTilt(BACK_PAN_CONTROL_PIN , BACK_TILT_CONTROL_PIN )
     speed_pid_controller   = pid.Pid(SPEED_PID_KP  , SPEED_PID_KI  , SPEED_PID_KD  , SPEED_PID_TARGET  , SPEED_PID_MIN  , SPEED_PID_MAX  , SPEED_PID_WINDUP  )

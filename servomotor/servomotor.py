@@ -69,6 +69,8 @@ class ServoMotor:
 
     def set_angle(self, angle):
 
+        angle *= -1.0
+
         angle = utils.clamp(angle, ANGLE_MIN, ANGLE_MAX)
 
         pwm_value = self.center_pwm - angle * self.pwm_ratio
@@ -107,7 +109,7 @@ class ServoMotor:
 
     def get_angle(self):
 
-            return self.angle
+            return self.angle * -1.0
 
     def stop(self):
 
