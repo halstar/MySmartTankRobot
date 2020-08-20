@@ -1,23 +1,24 @@
 import os
 import json
 import imu
+import time
 
 from globals import *
 
-CALIBRATION_LOOP_COUNT = 10000
-
-MOVING_STAR_PATTERN = ['/', '-', '\\', '|']
+CALIBRATION_LOOP_COUNT        = 10000
+DRIFT_CALIBRATION_DURATION    = 60.0
+PROGRESS_INDICATION_STEP_IN_S = 1
 
 
 def main():
 
-    os.system("clear")
+    os.system('clear')
 
-    print("")
-    print("/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ")
-    print("|  IMU calibration starting... | ")
-    print("\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ")
-    print("")
+    print('')
+    print('/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ')
+    print('|  IMU calibration starting... | ')
+    print('\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ')
+    print('')
 
     with open(SETUP_FILE, 'r') as json_file:
         setup_data = json.load(json_file)
@@ -37,10 +38,16 @@ def main():
     y_gyroscope_measure = 0
     z_gyroscope_measure = 0
 
-    print("  ")
+    print('')
+    print('Computing accelerometers & gyroscopes offsets ', end = '', flush = True)
+
+    progress_time = time.time()
 
     for i in range(0, CALIBRATION_LOOP_COUNT):
-        print("\b" + MOVING_STAR_PATTERN[i % 4], end = '', flush = True)
+
+        if time.time() - progress_time > PROGRESS_INDICATION_STEP_IN_S:
+            print('.', end = '', flush = True)
+            progress_time = time.time()
 
         imu_device.read_acceleration_data()
         imu_device.read_gyroscope_data   ()
@@ -52,6 +59,8 @@ def main():
         x_gyroscope_measure += imu_device.get_x_gyroscope()
         y_gyroscope_measure += imu_device.get_y_gyroscope()
         z_gyroscope_measure += imu_device.get_z_gyroscope()
+
+    print('')
 
     x_acceleration_measure /= CALIBRATION_LOOP_COUNT
     y_acceleration_measure /= CALIBRATION_LOOP_COUNT
@@ -77,6 +86,49 @@ def main():
     imu_device.set_y_gyroscope_offset(y_gyroscope_offset)
     imu_device.set_z_gyroscope_offset(z_gyroscope_offset)
 
+    print('')
+    imu_device.print_info()
+
+    print('')
+    print('Computing gyroscopes drift corrections ', end = '', flush = True)
+
+    i             = 0
+    start_time    = time.time()
+    progress_time = time.time()
+
+    x_gyroscope_measure = 0
+    y_gyroscope_measure = 0
+    z_gyroscope_measure = 0
+
+    while time.time() - start_time < DRIFT_CALIBRATION_DURATION:
+
+        if time.time() - progress_time > PROGRESS_INDICATION_STEP_IN_S:
+            print('.', end = '', flush = True)
+            progress_time = time.time()
+
+        imu_device.read_gyroscope_data()
+
+        x_gyroscope_measure += imu_device.get_x_gyroscope()
+        y_gyroscope_measure += imu_device.get_y_gyroscope()
+        z_gyroscope_measure += imu_device.get_z_gyroscope()
+
+        i += 1
+
+    print('')
+
+    x_gyroscope_measure /= DRIFT_CALIBRATION_DURATION
+    y_gyroscope_measure /= DRIFT_CALIBRATION_DURATION
+    z_gyroscope_measure /= DRIFT_CALIBRATION_DURATION
+
+    x_gyroscope_drift_correction = int(x_gyroscope_measure)
+    y_gyroscope_drift_correction = int(y_gyroscope_measure)
+    z_gyroscope_drift_correction = int(z_gyroscope_measure)
+
+    imu_device.set_x_gyroscope_drift_correction(x_gyroscope_drift_correction)
+    imu_device.set_y_gyroscope_drift_correction(y_gyroscope_drift_correction)
+    imu_device.set_z_gyroscope_drift_correction(z_gyroscope_drift_correction)
+
+    print('')
     imu_device.print_info()
 
     setup_data['ACCELERATION_X_OFFSET'] = x_acceleration_offset
@@ -87,14 +139,18 @@ def main():
     setup_data['GYROSCOPE_Y_OFFSET'] = y_gyroscope_offset
     setup_data['GYROSCOPE_Z_OFFSET'] = z_gyroscope_offset
 
-    with open(SETUP_FILE, "w") as json_file:
+    setup_data['GYROSCOPE_X_DRIFT_CORRECTION'] = x_gyroscope_drift_correction
+    setup_data['GYROSCOPE_Y_DRIFT_CORRECTION'] = y_gyroscope_drift_correction
+    setup_data['GYROSCOPE_Z_DRIFT_CORRECTION'] = z_gyroscope_drift_correction
+
+    with open(SETUP_FILE, 'w') as json_file:
         json.dump(setup_data, json_file, indent=4)
 
-    print("")
-    print("/\/\/\/\/\/\/\/\/\/\/\/\/\ ")
-    print("| IMU calibration done!  | ")
-    print("\/\/\/\/\/\/\/\/\/\/\/\/\/ ")
-    print("")
+    print('')
+    print('/\/\/\/\/\/\/\/\/\/\/\/\/\ ')
+    print('| IMU calibration done!  | ')
+    print('\/\/\/\/\/\/\/\/\/\/\/\/\/ ')
+    print('')
 
 
 if __name__ == '__main__':
@@ -104,7 +160,7 @@ if __name__ == '__main__':
         main()
 
     except KeyboardInterrupt:
-        print("Keyboard interrupt...")
+        print('Keyboard interrupt...')
 
     except Exception as e:
-        print("Error: " + str(e))
+        print('Error: ' + str(e))

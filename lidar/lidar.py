@@ -1,6 +1,6 @@
-import VL53L1X
 import RPi.GPIO
 
+from VL53L1X import *
 from globals import *
 from log     import *
 
@@ -27,24 +27,23 @@ class Lidar:
         try:
 
             # Try and setup primary LIDAR with its target address (case of SW restart)
-            self.lidar = VL53L1X.VL53L1X(I2C_BUS_NUMBER, primary_i2c_address)
+            self.lidar = VL53L1X(I2C_BUS_NUMBER, primary_i2c_address)
             self.lidar.open()
 
         except Exception:
 
             # Setup primary LIDAR with default address (case of HW reset)
-            self.lidar = VL53L1X.VL53L1X(I2C_BUS_NUMBER, DEFAULT_LIDAR_ADDRESS)
+            self.lidar = VL53L1X(I2C_BUS_NUMBER, DEFAULT_LIDAR_ADDRESS)
             self.lidar.open()
 
             # Now we can change address, to use the target one
             self.lidar.change_address(primary_i2c_address)
             self.lidar.open()
 
-        # UPDATE_TIME_MICROS = 66000
-        # INTER_MEASUREMENT_PERIOD_MILLIS = 70
-        self.lidar.set_timing(66000, 70)
+        # Timing budget time = 66 ms, inter-measurement period = 70 ms
+        self.lidar.set_timing(LIDAR_TIMING_BUDGET_IN_US, LIDAR_INTER_MEASUREMENT_IN_MS)
 
-        self.lidar.start_ranging(2)
+        self.lidar.start_ranging(VL53L1xDistanceMode.NONE)
 
         log(INFO, 'Setup {} LIDAR done'.format(sensor_name))
 
@@ -53,7 +52,9 @@ class Lidar:
         next_distance = self.lidar.get_distance()
 
         if next_distance > 0:
-            self.distance = next_distance / 1000.0
+            self.distance = next_distance / 1000.0 + LIDAR_POSITION_OFFSET
+        else:
+            log(WARNING, 'LIDAR returned erroneuous distance: {:6.3f}'.format(next_distance))
 
         return self.distance
 

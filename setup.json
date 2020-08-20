@@ -1,25 +1,29 @@
 {
-    "START_CONSOLE"         : 1,
-    "LOG_LEVEL"             : 4,
+    "START_CONSOLE"                : 1,
+    "LOG_LEVEL"                    : 4,
 
-    "COMMANDS_SERVER_PORT"  : 12345,
-    "CAMERA_STREAMING_PORT" : 8000,
-    "DATA_REPORTING_PORT"   : 54321,
+    "COMMANDS_SERVER_PORT"         : 12345,
+    "CAMERA_STREAMING_PORT"        : 8000,
+    "DATA_REPORTING_PORT"          : 54321,
 
-    "CAMERA_IMAGE_WIDTH"    : 360,
-    "CAMERA_IMAGE_HEIGHT"   : 240,
+    "CAMERA_IMAGE_WIDTH"           : 360,
+    "CAMERA_IMAGE_HEIGHT"          : 240,
 
-    "ACCELERATION_X_OFFSET" : 1,
-    "ACCELERATION_Y_OFFSET" : 2,
-    "ACCELERATION_Z_OFFSET" : 3,
+    "ACCELERATION_X_OFFSET"        : 1,
+    "ACCELERATION_Y_OFFSET"        : 2,
+    "ACCELERATION_Z_OFFSET"        : 3,
 
-    "GYROSCOPE_X_OFFSET"    : 4,
-    "GYROSCOPE_Y_OFFSET"    : 5,
-    "GYROSCOPE_Z_OFFSET"    : 6,
+    "GYROSCOPE_X_OFFSET"           : 4,
+    "GYROSCOPE_Y_OFFSET"           : 5,
+    "GYROSCOPE_Z_OFFSET"           : 6,
 
-    "DC_MOTOR_LEFT_OFFSET"  : 20,
-    "DC_MOTOR_RIGHT_OFFSET" : 20,
+    "GYROSCOPE_X_DRIFT_CORRECTION" : 7,
+    "GYROSCOPE_Y_DRIFT_CORRECTION" : 8,
+    "GYROSCOPE_Z_DRIFT_CORRECTION" : 9,
 
-    "SERVO_MOTOR_MIN_PULSE" : 500,
-    "SERVO_MOTOR_MAX_PULSE" : 2500
+    "DC_MOTOR_LEFT_OFFSET"         : 20,
+    "DC_MOTOR_RIGHT_OFFSET"        : 20,
+
+    "SERVO_MOTOR_MIN_PULSE"        : 500,
+    "SERVO_MOTOR_MAX_PULSE"        : 2500
 }

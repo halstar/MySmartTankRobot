@@ -1,5 +1,4 @@
 import utils
-import time
 import os
 import RPi.GPIO
 import gpiozero
@@ -8,9 +7,9 @@ import pigpio
 from globals import *
 from log     import *
 
-ANGLE_MIN       = -90
-ANGLE_MAX       =  90
-ANGLE_DEFAULT   =   0
+ANGLE_MIN     = -90
+ANGLE_MAX     =  90
+ANGLE_DEFAULT =   0
 
 
 class ServoMotor:
@@ -116,7 +115,6 @@ class ServoMotor:
         if self.is_started == True:
 
             self.set_angle(ANGLE_DEFAULT)
-            time.sleep(2.0)
 
             if self.gpio_interface == USE_RPI_GPIO:
 

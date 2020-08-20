@@ -11,13 +11,13 @@ PULSE_STEP      = 10
 
 def main():
 
-    os.system("clear")
+    os.system('clear')
 
-    print("")
-    print("/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ")
-    print("| Servo motor calibration starting... |")
-    print("\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ")
-    print("")
+    print('')
+    print('/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ')
+    print('| Servo motor calibration starting... |')
+    print('\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ')
+    print('')
 
     with open(SETUP_FILE, 'r') as json_file:
         setup_data = json.load(json_file)
@@ -33,7 +33,7 @@ def main():
 
         pwm.set_servo_pulsewidth(CONTROL_PIN, pulse_width)
 
-        print("Seeking min pulse - Current: {}. Hit Enter as long as motor moves, else type OK: ".format(pulse_width), end = '', flush = True)
+        print('Seeking min pulse - Current: {}. Hit Enter as long as motor moves, else type OK: '.format(pulse_width), end = '', flush = True)
         user_input = input()
         if user_input == 'OK':
             is_calibration_done = True
@@ -42,7 +42,7 @@ def main():
 
     setup_data['SERVO_MOTOR_MIN_PULSE'] = pulse_width + PULSE_STEP
 
-    print("")
+    print('')
 
     pulse_width         = MID_PULSE_WIDTH
     is_calibration_done = False
@@ -51,7 +51,7 @@ def main():
 
         pwm.set_servo_pulsewidth(CONTROL_PIN, pulse_width)
 
-        print("Seeking max pulse - Current: {}. Hit Enter as long as motor moves, else type OK: ".format(pulse_width), end = '', flush = True)
+        print('Seeking max pulse - Current: {}. Hit Enter as long as motor moves, else type OK: '.format(pulse_width), end = '', flush = True)
         user_input = input()
         if user_input == 'OK':
             is_calibration_done = True
@@ -60,14 +60,14 @@ def main():
 
     setup_data['SERVO_MOTOR_MAX_PULSE'] = pulse_width - PULSE_STEP
 
-    with open(SETUP_FILE, "w") as json_file:
+    with open(SETUP_FILE, 'w') as json_file:
         json.dump(setup_data, json_file, indent=4)
 
-    print("")
-    print("/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ")
-    print("| Servo motor calibration done! |")
-    print("\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ")
-    print("")
+    print('')
+    print('/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ')
+    print('| Servo motor calibration done! |')
+    print('\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ')
+    print('')
 
 
 if __name__ == '__main__':
@@ -77,7 +77,7 @@ if __name__ == '__main__':
         main()
 
     except KeyboardInterrupt:
-        print("Keyboard interrupt...")
+        print('Keyboard interrupt...')
 
     except Exception as e:
-        print("Error: " + str(e))
+        print('Error: ' + str(e))

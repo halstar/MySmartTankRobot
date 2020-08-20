@@ -50,6 +50,10 @@ class ImuDevice:
         self.gyroscope_offset_y = 0
         self.gyroscope_offset_z = 0
 
+        self.gyroscope_drift_correction_x = 0
+        self.gyroscope_drift_correction_y = 0
+        self.gyroscope_drift_correction_z = 0
+
         self.roll  = 0
         self.pitch = 0
 
@@ -124,6 +128,10 @@ class ImuDevice:
         self.gyroscope_offset_x = 0
         self.gyroscope_offset_y = 0
         self.gyroscope_offset_z = 0
+
+        self.gyroscope_drift_correction_x = 0
+        self.gyroscope_drift_correction_y = 0
+        self.gyroscope_drift_correction_z = 0
 
     def read_acceleration_data(self):
         self.acceleration_x = self.__read_word__(ACCEL_XOUT_H) - self.acceleration_offset_x
@@ -216,6 +224,24 @@ class ImuDevice:
     def set_z_gyroscope_offset(self, offset):
         self.gyroscope_offset_z = offset
 
+    def get_x_gyroscope_drift_correction(self):
+        return self.gyroscope_drift_correction_x
+
+    def set_x_gyroscope_drift_correction(self, correction):
+        self.gyroscope_drift_correction_x = correction
+
+    def get_y_gyroscope_drift_correction(self):
+        return self.gyroscope_drift_correction_y
+
+    def set_y_gyroscope_drift_correction(self, correction):
+        self.gyroscope_drift_correction_y = correction
+
+    def get_z_gyroscope_drift_correction(self):
+        return self.gyroscope_drift_correction_z
+
+    def set_z_gyroscope_drift_correction(self, correction):
+        self.gyroscope_drift_correction_z = correction
+
     def get_roll(self):
         return self.roll
 
@@ -233,8 +259,9 @@ class ImuDevice:
 
     def print_info(self):
 
-        print("X / Y / Z acceleration offsets: {} / {} / {}".format(self.acceleration_offset_x, self.acceleration_offset_y, self.acceleration_offset_z))
-        print("X / Y / Z gyroscope    offsets: {} / {} / {}".format(self.gyroscope_offset_x   , self.gyroscope_offset_y   , self.gyroscope_offset_z   ))
+        print("X / Y / Z acceleration offsets       : {} / {} / {}".format(self.acceleration_offset_x       , self.acceleration_offset_y       , self.acceleration_offset_z       ))
+        print("X / Y / Z gyroscope    offsets       : {} / {} / {}".format(self.gyroscope_offset_x          , self.gyroscope_offset_y          , self.gyroscope_offset_z          ))
+        print("X / Y / Z gyroscope drift corrections: {} / {} / {}".format(self.gyroscope_drift_correction_x, self.gyroscope_drift_correction_y, self.gyroscope_drift_correction_z))
 
         self.read_acceleration_data()
         self.read_gyroscope_data   ()

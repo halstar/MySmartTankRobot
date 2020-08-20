@@ -1,6 +1,5 @@
 import json
 import os
-import queue
 import threading
 import time
 import RPi.GPIO
@@ -10,11 +9,11 @@ import dcmotor
 import encoder
 import imu
 import lidar
-import pantilt
 import pid
 import remotectrl
 import streamer
 
+from pantilt import *
 from globals import *
 from log     import *
 
@@ -26,68 +25,153 @@ def robot_control_thread(robot):
     robot.start()
 
 
-def run_obstacles_avoidance(robot, front_pan_tilt, front_lidar):
+def find_min_max_obstacles(front_pan_tilt, front_lidar, back_pan_tilt, back_lidar):
 
-    speed_samples     = queue.Queue()
-    number_of_samples = 0
-    robot_seems_stuck = False
+    log(INFO, 'Finding closest & farthest obstacles')
+
+    front_pan_tilt.start_scanning_area(PAN_ANGLE_MIN, PAN_ANGLE_MAX, OBSTACLE_DETAILED_STEP, 0, 0, 0)
+    back_pan_tilt.start_scanning_area (PAN_ANGLE_MIN, PAN_ANGLE_MAX, OBSTACLE_DETAILED_STEP, 0, 0, 0)
+
+    obstacles = []
+
+    is_scanning_done = False
+
+    while is_scanning_done == False:
+
+        start_time = time.time()
+
+        pan_angle  = front_pan_tilt.get_pan()
+        tilt_angle = front_pan_tilt.get_tilt()
+
+        log(DEBUG, 'Scan step: {:6.2f} / {}'.format(pan_angle, tilt_angle))
+
+        distance = front_lidar.get_distance()
+        obstacles.append({'angle': pan_angle, 'distance': distance})
+
+        # Compute back pan tilt angle in front pan tilt referential
+        if 0 <= pan_angle <= 90:
+            pan_angle -= 180
+        else:
+            pan_angle += 180
+
+        distance = back_lidar.get_distance()
+        obstacles.append({'angle': pan_angle, 'distance': distance})
+
+        is_scanning_done = front_pan_tilt.step_scanning_area()
+        is_scanning_done = back_pan_tilt.step_scanning_area()
+
+        elapsed_time = time.time() - start_time
+
+        if elapsed_time < LIDAR_LOOP_TIME_STEP:
+            time.sleep(LIDAR_LOOP_TIME_STEP - elapsed_time)
+
+    min_distance = 100
+    min_angle    = 0
+    max_distance = 0
+    max_angle    = 0
+
+    for obstacle in obstacles:
+
+        distance = obstacle['distance']
+        angle    = obstacle['angle'   ]
+
+        if distance < min_distance:
+            min_distance = distance
+            min_angle    = angle
+
+        if distance > max_distance:
+            max_distance = distance
+            max_angle    = angle
+
+    log(INFO, 'Closest  obstacle : {:6.3f} m @ {:6.2f}'.format(min_distance, min_angle))
+    log(INFO, 'Farthest obstacle : {:6.3f} m @ {:6.2f}'.format(max_distance, max_angle))
+
+    return min_distance, min_angle, max_distance, max_angle
+
+
+def find_closest_obstacle(front_pan_tilt, front_lidar, back_pan_tilt, back_lidar):
+
+    min_distance, min_angle, max_distance, max_angle = find_min_max_obstacles(front_pan_tilt, front_lidar, back_pan_tilt, back_lidar)
+
+    return min_distance, min_angle
+
+
+def find_farthest_obstacle(front_pan_tilt, front_lidar, back_pan_tilt, back_lidar):
+
+    min_distance, min_angle, max_distance, max_angle = find_min_max_obstacles(front_pan_tilt, front_lidar, back_pan_tilt, back_lidar)
+
+    return max_distance, max_angle
+
+
+def run_obstacles_avoidance(robot, front_pan_tilt, front_lidar, back_pan_tilt, back_lidar):
 
     log(INFO, 'Starting obstacles avoidance mode')
 
     front_pan_tilt.reset()
+    back_pan_tilt.reset ()
 
-    return
+    search_direction = True
 
     while (control.main_mode == MODE.AVOID_OBSTACLES) and (control.is_mode_aborted == False):
 
-        next_obstacle_distance = front_lidar.get_distance()
+        if search_direction == True:
 
-        speed_samples.put(robot.get_speed())
-        number_of_samples += 1
+            robot.stop()
 
-        if number_of_samples >= 3:
+            # ####################################### #
+            # Find direction of the farthest obstacle #
+            # ####################################### #
 
-            if max(list(speed_samples.queue)) - min(list(speed_samples.queue)) < 0.1:
-                robot_seems_stuck = True
+            farthest_obstacle_distance, farthest_obstacle_angle = find_farthest_obstacle(front_pan_tilt, front_lidar, back_pan_tilt, back_lidar)
+
+            # ############################# #
+            # Aim at this farthest obstacle #
+            # ############################# #
+
+            if farthest_obstacle_angle < 0:
+
+                robot.right_with_angle(-farthest_obstacle_angle)
+
             else:
-                robot_seems_stuck = False
 
-            speed_samples.get()
+                robot.left_with_angle(farthest_obstacle_angle)
 
-        if robot_seems_stuck == True:
-
-            log(INFO, 'Robot seems stuck')
-
-            robot.stop()
-            time.sleep(1.0)
-            robot.backward(TARGET_SPEED_STEP)
-            time.sleep(1.5)
-            robot.stop()
-            time.sleep(1.0)
-            robot.left_with_strength(TURNING_ANGLE_STEP)
-            time.sleep(2.0)
-
-            robot_seems_stuck = False
-            number_of_samples = 0
-            speed_samples.empty()
-
-        elif next_obstacle_distance < OBSTACLE_DISTANCE:
-
-            log(DEBUG, 'Obstacle ahead')
-
-            robot.stop()
-            time.sleep(1.0)
-            robot.right_with_strength(TURNING_ANGLE_STEP)
-            time.sleep(2.0)
+            search_direction = False
 
         else:
 
-            log(DEBUG, 'Path is clear')
+            # ############################# #
+            # Get distance of next obstacle #
+            # ############################# #
 
-            robot.forward(TARGET_SPEED_STEP)
-            time.sleep(0.1)
+            next_obstacle_distance = front_lidar.get_distance()
+
+        # ################################ #
+        #  Now move forward that direction #
+        # ################################ #
+
+        if robot.is_stuck() == True:
+
+            log(DEBUG, 'Robot seems stuck: changing direction')
+
+            robot.reset_stuck_status()
+
+            search_direction = True
+
+        elif next_obstacle_distance < AVOID_OBSTACLE_STOP_DISTANCE:
+
+            log(DEBUG, 'Obstacle ahead: changing direction')
+
+            search_direction = True
+
+        else:
+
+            log(DEBUG, 'Path is clear: moving on...')
+
+            robot.forward_step()
 
     front_pan_tilt.reset()
+    back_pan_tilt.reset ()
 
 
 def run_line_following(robot):
@@ -106,25 +190,97 @@ def run_corridor_following(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
     front_pan_tilt.reset()
     back_pan_tilt.reset ()
 
-    is_ready_to_go = False
+    # ###################################### #
+    # Find direction of the closest obstacle #
+    # ###################################### #
 
-    # Get the best possible centered position in corridor
-    while (is_ready_to_go == False) and (control.main_mode == MODE.FOLLOW_CORRIDOR) and (control.is_mode_aborted == False):
+    closest_obstacle_distance, closest_obstacle_angle = find_closest_obstacle(front_pan_tilt, front_lidar, back_pan_tilt, back_lidar)
 
-        front_pan_tilt.pan_go_left()
-        back_pan_tilt.pan_go_left ()
+    # ############################ #
+    # Aim at this closest obstacle #
+    # ############################ #
+
+    if closest_obstacle_angle < 0:
+
+        robot.right_with_angle(-closest_obstacle_angle)
+
+    else:
+
+        robot.left_with_angle(closest_obstacle_angle)
+
+    # Let time for the turn to be done
+    time.sleep(2.0)
+
+    log(INFO, 'Now aiming at the closest obstacle')
+
+    # ############################ #
+    # Get centered in the corridor #
+    # ############################ #
+
+    front_pan_tilt.reset()
+    back_pan_tilt.reset ()
+
+    is_centered = False
+
+    while is_centered == False:
+
+        front_wall_distance  = front_lidar.get_distance()
+        back_wall_distance   = back_lidar.get_distance ()
+
+        delta_distance = front_wall_distance - back_wall_distance
+
+        if -CORRIDOR_FOLLOWING_PRECISION < delta_distance < CORRIDOR_FOLLOWING_PRECISION:
+
+            is_centered = True
+
+        elif delta_distance > 0:
+            robot.forward_step ()
+        else:
+            robot.backward_step()
+
+    log(INFO, 'Now centered in corridor')
+
+    # ############################## #
+    # Get into the forward direction #
+    # ############################## #
+
+    robot.right_with_angle(90.0)
+
+    # Let time for the turn to be done
+    time.sleep(2.0)
+
+    log(INFO, 'Ready to move in corridor!')
+
+    # ######################################## #
+    #      Now move forward in corridor and    #
+    # keep the best possible centered position #
+    # ######################################## #
+
+    front_pan_tilt.pan_go_left()
+    back_pan_tilt.pan_go_left ()
+
+    while (control.main_mode == MODE.FOLLOW_CORRIDOR) and (control.is_mode_aborted == False):
 
         left_wall_distance  = front_lidar.get_distance()
         right_wall_distance = back_lidar.get_distance ()
 
-        is_ready_to_go = True
+        delta_distance = left_wall_distance - right_wall_distance
 
-        time.sleep(0.1)
+        if -CORRIDOR_FOLLOWING_PRECISION < delta_distance < CORRIDOR_FOLLOWING_PRECISION:
 
-    # Move along corridor and stay centered
-    while (control.main_mode == MODE.FOLLOW_CORRIDOR) and (control.is_mode_aborted == False):
+            robot.forward_step()
 
-        time.sleep(0.1)
+        elif delta_distance > 0:
+
+            robot.left_step   ()
+            robot.forward_step()
+            robot.right_step  ()
+
+        else:
+
+            robot.right_step  ()
+            robot.forward_step()
+            robot.left_step   ()
 
     front_pan_tilt.reset()
     back_pan_tilt.reset ()
@@ -153,7 +309,7 @@ def autonomous_mode_thread(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
 
         if control.main_mode == MODE.AVOID_OBSTACLES:
 
-            run_obstacles_avoidance(robot, front_pan_tilt, front_lidar)
+            run_obstacles_avoidance(robot, front_pan_tilt, front_lidar, back_pan_tilt, back_lidar)
 
         elif control.main_mode == MODE.FOLLOW_LINE:
 
@@ -192,23 +348,25 @@ def scanning_control_thread(pan_tilt, lidar, is_front, data_reporter):
 
             if control.display_mode == DISPLAY.SCAN_2D:
                 log(INFO, '{} 2D scan starting'.format(scan_name))
-                pan_tilt.start_scanning_area(-90, 89, OBSTACLE_STEP, 0, 0, 0)
+                pan_tilt.start_scanning_area(PAN_ANGLE_MIN, PAN_ANGLE_MAX, OBSTACLE_SCANNING_STEP, 0, 0, 0)
             else:
                 log(INFO, '{} 3D scan starting'.format(scan_name))
-                pan_tilt.start_scanning_area(-90, 89, OBSTACLE_STEP, -90, 0, OBSTACLE_STEP)
+                pan_tilt.start_scanning_area(PAN_ANGLE_MIN, PAN_ANGLE_MAX, OBSTACLE_SCANNING_STEP, TILT_ANGLE_MIN, 0, OBSTACLE_SCANNING_STEP)
 
             is_scanning_done = False
 
             while (is_scanning_done == False) and (control.display_mode == DISPLAY.SCAN_2D or control.display_mode == DISPLAY.SCAN_3D):
 
-                time.sleep(0.2)
+                start_time = time.time()
 
-                is_scanning_done, pan_angle, tilt_angle = pan_tilt.step_scanning_area()
+                pan_angle  = pan_tilt.get_pan ()
+                tilt_angle = pan_tilt.get_tilt()
 
                 log(DEBUG, '{} scan step: {:6.2f} / {}'.format(scan_name, pan_angle, tilt_angle))
 
-                obstacle_distance  = lidar.get_distance() + LIDAR_POSITION_OFFSET
+                obstacle_distance  = lidar.get_distance()
 
+                # Compute pan angle in the app's referential
                 if is_front == True:
                     pan_angle += 90
                 else:
@@ -216,9 +374,18 @@ def scanning_control_thread(pan_tilt, lidar, is_front, data_reporter):
 
                 data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:06.3f}'.format(-tilt_angle, pan_angle, obstacle_distance))
 
+                is_scanning_done = pan_tilt.step_scanning_area()
+
                 if (control.is_mode_aborted == True):
                     is_scanning_done = True
                     pan_tilt.reset()
+
+                elapsed_time = time.time() - start_time
+
+                if elapsed_time < LIDAR_LOOP_TIME_STEP:
+                    time.sleep(LIDAR_LOOP_TIME_STEP - elapsed_time)
+                else:
+                    log(WARNING, 'Scanning control thread is late!')
 
             if control.display_mode == DISPLAY.SCAN_2D:
                 log(INFO, '{} 2D scan done'.format(scan_name))
@@ -290,23 +457,29 @@ def live_3d_control_thread(front_pan_tilt, front_lidar, back_pan_tilt, back_lida
 
         else:
 
-            obstacle_distance  = front_lidar.get_distance() + LIDAR_POSITION_OFFSET
+            start_time = time.time()
 
-            pan_angle, tilt_angle = front_pan_tilt.get_position()
-            tilt_angle = 0
-            pan_angle += 90
+            front_pan_tilt.set_tilt(0)
+            back_pan_tilt.set_tilt (0)
 
-            data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:06.3f}'.format(tilt_angle, pan_angle, obstacle_distance))
-
-            obstacle_distance  = back_lidar.get_distance() + LIDAR_POSITION_OFFSET
-
-            pan_angle, tilt_angle = back_pan_tilt.get_position()
-            tilt_angle = 0
-            pan_angle += 270
+            obstacle_distance = front_lidar.get_distance()
+            pan_angle         = front_pan_tilt.get_pan () + 90
+            tilt_angle        = front_pan_tilt.get_tilt()
 
             data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:06.3f}'.format(tilt_angle, pan_angle, obstacle_distance))
 
-            time.sleep(0.1)
+            obstacle_distance = back_lidar.get_distance()
+            pan_angle         = back_pan_tilt.get_pan () +  270
+            tilt_angle        = back_pan_tilt.get_tilt()
+
+            data_reporter.enqueue_data('{:06.2f}:{:06.2f}:{:06.3f}'.format(tilt_angle, pan_angle, obstacle_distance))
+
+            elapsed_time = time.time() - start_time
+
+            if elapsed_time < LIDAR_LOOP_TIME_STEP:
+                time.sleep(LIDAR_LOOP_TIME_STEP - elapsed_time)
+            else:
+                log(WARNING, 'Live 3D control thread is late!')
 
 
 def print_help():
@@ -324,11 +497,11 @@ def print_help():
     print('Enter back  pan  angle value like: bp=50')
     print('Enter back  tilt angle value like: bt=-25')
     print('')
-    print('Press m to display DC    motors\'s data')
-    print('Press v to display servo motors\'s data')
-    print('Press c to display PIDs\'          data')
-    print('Press u to display IMU\'s          data')
-    print('Press r to display robot\'s        data')
+    print('Press m to display DC    motors data')
+    print('Press v to display servo motors data')
+    print('Press c to display PIDs         data')
+    print('Press u to display IMU          data')
+    print('Press r to display robot        data')
     print('')
     print('Set log level: l=0 > NO_LOG , 1 > ERROR,')
     print('                 2 > WARNING, 3 > INFO , 4 > DEBUG')
@@ -438,15 +611,15 @@ def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, f
                 else:
                     robot.stop()
             elif command == 'a':
-                if value > 0:
-                    robot.right_with_angle(value)
+                if value < 0:
+                    robot.right_with_angle(-value)
                 else:
-                    robot.left_with_angle(-value)
+                    robot.left_with_angle(value)
             elif command == 'g':
-                if value > 0:
-                    robot.right_with_strength(value)
+                if value < 0:
+                    robot.right_with_strength(-value)
                 else:
-                    robot.left_with_strength(-value)
+                    robot.left_with_strength(value)
 
         elif len(user_input) > 2 and user_input[2] == '=':
 

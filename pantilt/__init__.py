@@ -1,1 +1,1 @@
-from .pantilt import PanTilt
+from .pantilt import PanTilt, PAN_ANGLE_MIN, PAN_ANGLE_MAX, TILT_ANGLE_MIN, TILT_ANGLE_MAX

@@ -1,6 +1,7 @@
 import utils
 import servomotor
 import json
+import time
 
 from globals import *
 
@@ -10,6 +11,7 @@ PAN_ANGLE_DEFAULT  =   0
 TILT_ANGLE_MIN     = -90
 TILT_ANGLE_MAX     =  90
 TILT_ANGLE_DEFAULT =   0
+LONG_MOVE_DURATION = 0.5
 
 
 class PanTilt:
@@ -39,16 +41,7 @@ class PanTilt:
         self.pan_servo  = servomotor.ServoMotor(USE_PI_GPIO, pan_control_pin , setup_data['SERVO_MOTOR_MIN_PULSE'], setup_data['SERVO_MOTOR_MAX_PULSE'])
         self.tilt_servo = servomotor.ServoMotor(USE_PI_GPIO, tilt_control_pin, setup_data['SERVO_MOTOR_MIN_PULSE'], setup_data['SERVO_MOTOR_MAX_PULSE'])
 
-    def set_position(self, pan_angle, tilt_angle):
-
-        pan_angle  = utils.clamp(pan_angle , PAN_ANGLE_MIN , PAN_ANGLE_MAX )
-        tilt_angle = utils.clamp(tilt_angle, TILT_ANGLE_MIN, TILT_ANGLE_MAX)
-
-        self.pan_servo.set_angle (pan_angle )
-        self.tilt_servo.set_angle(tilt_angle)
-
-        self.pan_angle  = pan_angle
-        self.tilt_angle = tilt_angle
+        time.sleep(LONG_MOVE_DURATION)
 
     def set_pan(self, pan_angle):
 
@@ -66,9 +59,13 @@ class PanTilt:
 
         self.tilt_angle = tilt_angle
 
-    def get_position(self):
+    def get_pan(self):
 
-        return [self.pan_angle, self.tilt_angle]
+        return self.pan_angle
+
+    def get_tilt(self):
+
+        return self.tilt_angle
 
     def pan_setup_front(self, front_angle):
 
@@ -79,6 +76,8 @@ class PanTilt:
         self.pan_servo.set_angle(self.pan_front_angle)
         self.pan_angle = self.pan_front_angle
 
+        time.sleep(LONG_MOVE_DURATION)
+
     def pan_setup_left(self, left_angle):
 
         self.pan_left_angle = left_angle
@@ -87,6 +86,8 @@ class PanTilt:
 
         self.pan_servo.set_angle(self.pan_left_angle)
         self.pan_angle = self.pan_left_angle
+
+        time.sleep(LONG_MOVE_DURATION)
 
     def pan_setup_right(self, right_angle):
 
@@ -97,6 +98,8 @@ class PanTilt:
         self.pan_servo.set_angle(self.pan_right_angle)
         self.pan_angle = self.pan_right_angle
 
+        time.sleep(LONG_MOVE_DURATION)
+
     def tilt_setup_front(self, front_angle):
 
         self.tilt_front_angle = front_angle
@@ -105,6 +108,8 @@ class PanTilt:
 
         self.tilt_servo.set_angle(self.tilt_front_angle)
         self.tilt_angle = self.tilt_front_angle
+
+        time.sleep(LONG_MOVE_DURATION)
 
     def tilt_setup_up(self, up_angle):
 
@@ -115,6 +120,8 @@ class PanTilt:
         self.tilt_servo.set_angle(self.tilt_up_angle)
         self.tilt_angle = self.tilt_up_angle
 
+        time.sleep(LONG_MOVE_DURATION)
+
     def tilt_setup_down(self, down_angle):
 
         self.tilt_down_angle = down_angle
@@ -124,10 +131,14 @@ class PanTilt:
         self.tilt_servo.set_angle(self.tilt_down_angle)
         self.tilt_angle = self.tilt_down_angle
 
+        time.sleep(LONG_MOVE_DURATION)
+
     def reset(self):
 
         self.pan_go_front ()
         self.tilt_go_front()
+
+        time.sleep(LONG_MOVE_DURATION)
 
     def start_scanning_area(self,
                             pan_min_angle,
@@ -145,11 +156,14 @@ class PanTilt:
         self.scanning_tilt_max_angle = tilt_max_angle
         self.scanning_tilt_step      = tilt_step
 
-        self.set_position(pan_min_angle, tilt_min_angle)
+        self.set_pan (pan_min_angle )
+        self.set_tilt(tilt_min_angle)
+
+        time.sleep(LONG_MOVE_DURATION)
 
     def step_scanning_area(self):
 
-        if self.pan_angle + self.scanning_pan_step <= self.scanning_pan_max_angle:
+        if (self.scanning_pan_step != 0) and (self.pan_angle + self.scanning_pan_step <= self.scanning_pan_max_angle):
 
             self.set_pan(self.pan_angle + self.scanning_pan_step)
 
@@ -157,7 +171,7 @@ class PanTilt:
 
             self.set_pan(self.scanning_pan_min_angle)
 
-            if self.tilt_angle + self.scanning_tilt_step <= self.scanning_tilt_max_angle:
+            if (self.scanning_tilt_step != 0) and (self.tilt_angle + self.scanning_tilt_step <= self.scanning_tilt_max_angle):
 
                 self.set_tilt(self.tilt_angle + self.scanning_tilt_step)
 
@@ -166,18 +180,14 @@ class PanTilt:
                 self.scanning_is_in_progress = False
                 self.reset()
 
-        if self.scanning_is_in_progress == True:
-
-            return False, self.pan_angle, self.tilt_angle
-
-        else:
-
-            return True, self.pan_angle, self.tilt_angle
+        return not self.scanning_is_in_progress
 
     def stop(self):
 
         self.pan_servo.stop ()
         self.tilt_servo.stop()
+
+        time.sleep(LONG_MOVE_DURATION)
 
     def print_info(self, position):
 

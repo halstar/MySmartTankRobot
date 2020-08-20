@@ -17,13 +17,13 @@ SETUP_FILE = 'setup.json'
 
 def main():
 
-    os.system("clear")
+    os.system('clear')
 
-    print("")
-    print("/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ")
-    print("| Motors calibration starting... |")
-    print("\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ")
-    print("")
+    print('')
+    print('/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ')
+    print('| Motors calibration starting... |')
+    print('\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ')
+    print('')
 
     with open(SETUP_FILE, 'r') as json_file:
         setup_data = json.load(json_file)
@@ -37,7 +37,7 @@ def main():
     while not is_motor_done:
 
         left_motor.forward(speed_value)
-        print("Left motor speed: {}. Hit Enter if motor is not moving, else type OK: ".format(speed_value), end = '', flush = True)
+        print('Left motor speed: {}. Hit Enter if motor is not moving, else type OK: '.format(speed_value), end = '', flush = True)
         user_input = input()
         if user_input == 'OK':
             is_motor_done = True
@@ -50,12 +50,12 @@ def main():
     speed_value   = 0
     is_motor_done = False
 
-    print("")
+    print('')
 
     while not is_motor_done:
 
         right_motor.forward(speed_value)
-        print("Right motor speed: {}. Hit Enter if motor is not moving, else type OK: ".format(speed_value), end = '', flush = True)
+        print('Right motor speed: {}. Hit Enter if motor is not moving, else type OK: '.format(speed_value), end = '', flush = True)
         user_input = input()
         if user_input == 'OK':
             is_motor_done = True
@@ -65,14 +65,14 @@ def main():
 
     setup_data['DC_MOTOR_RIGHT_OFFSET'] = speed_value
 
-    with open(SETUP_FILE, "w") as json_file:
+    with open(SETUP_FILE, 'w') as json_file:
         json.dump(setup_data, json_file, indent=4)
 
-    print("")
-    print("/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ")
-    print("| Motors calibration done! |")
-    print("\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ")
-    print("")
+    print('')
+    print('/\/\/\/\/\/\/\/\/\/\/\/\/\/\ ')
+    print('| Motors calibration done! |')
+    print('\/\/\/\/\/\/\/\/\/\/\/\/\/\/ ')
+    print('')
 
 
 if __name__ == '__main__':
@@ -82,7 +82,7 @@ if __name__ == '__main__':
         main()
 
     except KeyboardInterrupt:
-        print("Keyboard interrupt...")
+        print('Keyboard interrupt...')
 
     except Exception as e:
-        print("Error: " + str(e))
+        print('Error: ' + str(e))
