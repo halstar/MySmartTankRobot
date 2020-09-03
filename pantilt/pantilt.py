@@ -24,8 +24,8 @@ class PanTilt:
         self.pan_angle        = PAN_ANGLE_DEFAULT
         self.tilt_angle       = TILT_ANGLE_DEFAULT
         self.pan_front_angle  = PAN_ANGLE_DEFAULT
-        self.pan_left_angle   = PAN_ANGLE_MIN
-        self.pan_right_angle  = PAN_ANGLE_MAX
+        self.pan_left_angle   = PAN_ANGLE_MAX
+        self.pan_right_angle  = PAN_ANGLE_MIN
         self.tilt_front_angle = TILT_ANGLE_DEFAULT
         self.tilt_up_angle    = TILT_ANGLE_MIN
         self.tilt_down_angle  = TILT_ANGLE_MAX
@@ -41,6 +41,8 @@ class PanTilt:
         self.pan_servo  = servomotor.ServoMotor(USE_PI_GPIO, pan_control_pin , setup_data['SERVO_MOTOR_MIN_PULSE'], setup_data['SERVO_MOTOR_MAX_PULSE'])
         self.tilt_servo = servomotor.ServoMotor(USE_PI_GPIO, tilt_control_pin, setup_data['SERVO_MOTOR_MIN_PULSE'], setup_data['SERVO_MOTOR_MAX_PULSE'])
 
+        self.is_reset = True
+
         time.sleep(LONG_MOVE_DURATION)
 
     def set_pan(self, pan_angle):
@@ -51,6 +53,8 @@ class PanTilt:
 
         self.pan_angle = pan_angle
 
+        self.is_reset = False
+
     def set_tilt(self, tilt_angle):
 
         tilt_angle = utils.clamp(tilt_angle, TILT_ANGLE_MIN , TILT_ANGLE_MAX)
@@ -58,6 +62,8 @@ class PanTilt:
         self.tilt_servo.set_angle(tilt_angle)
 
         self.tilt_angle = tilt_angle
+
+        self.is_reset = False
 
     def get_pan(self):
 
@@ -78,6 +84,8 @@ class PanTilt:
 
         time.sleep(LONG_MOVE_DURATION)
 
+        self.is_reset = False
+
     def pan_setup_left(self, left_angle):
 
         self.pan_left_angle = left_angle
@@ -88,6 +96,8 @@ class PanTilt:
         self.pan_angle = self.pan_left_angle
 
         time.sleep(LONG_MOVE_DURATION)
+
+        self.is_reset = False
 
     def pan_setup_right(self, right_angle):
 
@@ -100,6 +110,8 @@ class PanTilt:
 
         time.sleep(LONG_MOVE_DURATION)
 
+        self.is_reset = False
+
     def tilt_setup_front(self, front_angle):
 
         self.tilt_front_angle = front_angle
@@ -110,6 +122,8 @@ class PanTilt:
         self.tilt_angle = self.tilt_front_angle
 
         time.sleep(LONG_MOVE_DURATION)
+
+        self.is_reset = False
 
     def tilt_setup_up(self, up_angle):
 
@@ -122,6 +136,8 @@ class PanTilt:
 
         time.sleep(LONG_MOVE_DURATION)
 
+        self.is_reset = False
+
     def tilt_setup_down(self, down_angle):
 
         self.tilt_down_angle = down_angle
@@ -133,12 +149,19 @@ class PanTilt:
 
         time.sleep(LONG_MOVE_DURATION)
 
+        self.is_reset = False
+
     def reset(self):
 
-        self.pan_go_front ()
-        self.tilt_go_front()
+        if not self.is_reset:
 
-        time.sleep(LONG_MOVE_DURATION)
+            self.pan_go_front ()
+            self.tilt_go_front()
+
+            time.sleep(LONG_MOVE_DURATION)
+
+            self.pan_is_reset  = True
+            self.tile_is_reset = True
 
     def start_scanning_area(self,
                             pan_min_angle,
@@ -160,6 +183,8 @@ class PanTilt:
         self.set_tilt(tilt_min_angle)
 
         time.sleep(LONG_MOVE_DURATION)
+
+        self.is_reset = False
 
     def step_scanning_area(self):
 
@@ -184,6 +209,7 @@ class PanTilt:
 
     def stop(self):
 
+        self.reset          ()
         self.pan_servo.stop ()
         self.tilt_servo.stop()
 

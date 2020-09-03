@@ -61,6 +61,9 @@ class ImuDevice:
         self.pitch_rate = 0
         self.yaw_rate   = 0
 
+        self.last_gyroscope_read_time  = 0.0
+        self.gyroscope_read_delta_time = 0.0
+
         self.i2c_device = i2c.I2cDevice(I2C_BUS_NUMBER, IMU_ADDRESS)
 
         # Write power management register
@@ -142,6 +145,23 @@ class ImuDevice:
         self.gyroscope_x = self.__read_word__(GYRO_XOUT_H) - self.gyroscope_offset_x
         self.gyroscope_y = self.__read_word__(GYRO_YOUT_H) - self.gyroscope_offset_y
         self.gyroscope_z = self.__read_word__(GYRO_ZOUT_H) - self.gyroscope_offset_z
+
+        current_read_time = time.time()
+
+        if self.last_gyroscope_read_time != 0:
+            self.gyroscope_read_delta_time = current_read_time - self.last_gyroscope_read_time
+
+        self.last_gyroscope_read_time = current_read_time
+
+    def correct_gyroscope_data(self):
+
+        self.gyroscope_x -= self.gyroscope_drift_correction_x * self.gyroscope_read_delta_time
+        self.gyroscope_y -= self.gyroscope_drift_correction_y * self.gyroscope_read_delta_time
+        self.gyroscope_z -= self.gyroscope_drift_correction_z * self.gyroscope_read_delta_time
+
+        self.gyroscope_x = int(self.gyroscope_x)
+        self.gyroscope_y = int(self.gyroscope_y)
+        self.gyroscope_z = int(self.gyroscope_z)
 
     def get_x_acceleration(self):
         return self.acceleration_x
@@ -265,6 +285,7 @@ class ImuDevice:
 
         self.read_acceleration_data()
         self.read_gyroscope_data   ()
+        self.correct_gyroscope_data()
         self.compute_angles        ()
 
         print("")

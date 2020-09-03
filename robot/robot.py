@@ -1,8 +1,8 @@
-import queue
 import time
 
 from globals import *
 from log     import *
+
 
 class Robot:
 
@@ -28,11 +28,6 @@ class Robot:
         self.target_speed       = 0.0
         self.applied_speed      = 0.0
 
-        # Stuck status data
-        self.speed_samples     = queue.Queue()
-        self.number_of_samples = 0
-        self.is_stuck          = False
-
         # Setup IMU
         self.imu_device.reset        ()
         self.imu_device.reset_offsets()
@@ -52,7 +47,6 @@ class Robot:
         self.imu_device.set_y_gyroscope_drift_correction(setup_data['GYROSCOPE_Y_DRIFT_CORRECTION'])
         self.imu_device.set_z_gyroscope_drift_correction(setup_data['GYROSCOPE_Z_DRIFT_CORRECTION'])
 
-
     def stop(self):
 
         log(INFO, 'Robot >>> stop')
@@ -60,6 +54,13 @@ class Robot:
         self.turn_angle_order = 0.0
         self.turn_speed_step  = 0.0
         self.target_speed     = 0.0
+
+    def stop_turn(self):
+
+        log(INFO, 'Robot >>> stop turn')
+
+        self.turn_angle_order = 0.0
+        self.turn_speed_step  = 0.0
 
     def forward(self, speed):
 
@@ -77,7 +78,7 @@ class Robot:
 
         log(DEBUG, 'Robot >>> forward step')
 
-        self.target_speed = TARGET_SPEED_STEP /2
+        self.target_speed = TARGET_SPEED_STEP / 2
         time.sleep(ROBOT_FORWARD_BACKWARD_STEP_TIME)
         self.target_speed = 0.0
 
@@ -85,7 +86,7 @@ class Robot:
 
         log(DEBUG, 'Robot >>> backward step')
 
-        self.target_speed = -TARGET_SPEED_STEP /2
+        self.target_speed = -TARGET_SPEED_STEP / 2
         time.sleep(ROBOT_FORWARD_BACKWARD_STEP_TIME)
         self.target_speed = 0.0
 
@@ -94,14 +95,14 @@ class Robot:
         log(INFO, 'Robot >>> turning left @ angle = {:3.2f}'.format(angle))
 
         self.turn_angle_order = self.relative_yaw_angle + angle
-        self.turn_speed_step  = TURNING_SPEED_STEP / 4
+        self.turn_speed_step  = TURNING_SPEED_STEP / 2
 
     def right_with_angle(self, angle):
 
         log(INFO, 'Robot >>> turning right @ angle = {:3.2f}'.format(angle))
 
         self.turn_angle_order = self.relative_yaw_angle - angle
-        self.turn_speed_step  = -TURNING_SPEED_STEP / 4
+        self.turn_speed_step  = -TURNING_SPEED_STEP / 2
 
     def left_with_strength(self, strength):
 
@@ -124,6 +125,7 @@ class Robot:
         self.turn_angle_order = 0.0
         self.turn_speed_step  = TURNING_SPEED_STEP
         time.sleep(ROBOT_LEFT_RIGHT_TURN_STEP_TIME)
+        self.turn_speed_step  = 0.0
 
     def right_step(self):
 
@@ -132,30 +134,17 @@ class Robot:
         self.turn_angle_order = 0.0
         self.turn_speed_step  = -TURNING_SPEED_STEP
         time.sleep(ROBOT_LEFT_RIGHT_TURN_STEP_TIME)
+        self.turn_speed_step  = 0.0
 
     def get_speed(self):
 
         return self.current_speed
-
-    def is_stuck(self):
-
-        return self.is_stuck
-
-    def reset_stuck_status(self):
-
-        self.speed_samples.empty()
-        self.number_of_samples = 0
-        self.is_stuck          = False
 
     def print_info(self):
 
         print('Left encoder     = {:6.2f} / Right encoder  = {:6.2f}'.format                          (self.left_counter    , self.right_counter                          ))
         print('Target speed     = {:6.2f} / Current speed  = {:6.2f} / Applied speed = {:6.2f}'.format(self.target_speed    , self.current_speed , self.applied_speed     ))
         print('Turn angle order = {:6.2f} / Filtered pitch = {:6.2f} / Relative yaw  = {:6.2f}'.format(self.turn_angle_order, self.filtered_pitch, self.relative_yaw_angle))
-        if self.is_stuck == True:
-            print('Robot is stuck')
-        else:
-            print('Robot is NOT stuck')
 
     def start(self):
 
@@ -189,33 +178,6 @@ class Robot:
             self.left_encoder.reset_counter ()
             self.right_encoder.reset_counter()
 
-            # ######################## #
-            # Stuck status computation #
-            # ######################## #
-
-            if (self.target_speed != 0) or (self.turn_speed_step != 0):
-
-                self.speed_samples.put(self.current_speed)
-                self.number_of_samples += 1
-
-                if self.number_of_samples >= 5:
-
-                    if max(list(self.speed_samples.queue)) - min(list(self.speed_samples.queue)) < 1.0:
-
-                        if self.is_stuck == False:
-                            log(INFO, 'Robot entering stuck state')
-
-                        self.is_stuck = True
-
-                    else:
-
-                        if self.is_stuck == True:
-                            log(INFO, 'Robot leaving stuck state')
-
-                        self.is_stuck = False
-
-                    self.speed_samples.get()
-
             # ####################### #
             # Situational computation #
             # ####################### #
@@ -228,6 +190,8 @@ class Robot:
                 log(ERROR, 'IMU/I2C error detected')
                 log(ERROR, e)
                 continue
+
+            self.imu_device.correct_gyroscope_data()
 
             self.imu_device.compute_angles()
             self.imu_device.compute_rates ()
@@ -245,19 +209,17 @@ class Robot:
 
             if self.turn_angle_order != 0:
 
-                if self.turn_speed_step > 0 and self.relative_yaw_angle > (95 / 100) * self.turn_angle_order:
+                if self.turn_speed_step > 0 and self.relative_yaw_angle > self.turn_angle_order - 3.0:
 
-                    self.turn_angle_order = 0.0
-                    self.turn_speed_step  = 0.0
+                    self.stop_turn()
 
-                    log(DEBUG, 'Ordered left turn is over!')
+                    log(DEBUG, 'Ordered left turn is over')
 
-                elif self.turn_speed_step < 0 and self.relative_yaw_angle < (95 / 100) * self.turn_angle_order:
+                elif self.turn_speed_step < 0 and self.relative_yaw_angle < self.turn_angle_order + 3.0:
 
-                    self.turn_angle_order = 0.0
-                    self.turn_speed_step  = 0.0
+                    self.stop_turn()
 
-                    log(DEBUG, 'Ordered right turn is over!')
+                    log(DEBUG, 'Ordered right turn is over')
 
             # ########################## #
             # Overall speeds computation #

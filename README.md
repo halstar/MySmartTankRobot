@@ -1,11 +1,11 @@
 # MySmartTankRobot
 
-A homemade smart tank robot built on a Raspberry Pi 3 B+ basis, with different regular sensors (IMU, ultrasonic), and a camera.
+A homemade smart tank robot built on a Raspberry Pi 3 B+ basis, with micro servo motors, different regular sensors (IMU, LIDARs) and an infrared camera.
 
 This repository gathers sources Python scripts to be executed on the Raspberry Pi.
 
-**Note**:  gpiozero & pigpio supports were partially tested. For the latter, the following commands might help!
+You can see the result at work in this video:
 
-* sudo pip3 install pigpio
+...soon...
 
-* sudo pigpiod
+**Note**:  pigpio is used for GPIO access; RPi.GPIO & gpiozero supports were partially tested.
