@@ -49,7 +49,7 @@ class Robot:
 
     def stop(self):
 
-        log(INFO, 'Robot >>> stop')
+        log(DEBUG, 'Robot >>> stop')
 
         self.turn_angle_order = 0.0
         self.turn_speed_step  = 0.0
@@ -57,20 +57,20 @@ class Robot:
 
     def stop_turn(self):
 
-        log(INFO, 'Robot >>> stop turn')
+        log(DEBUG, 'Robot >>> stop turn')
 
         self.turn_angle_order = 0.0
         self.turn_speed_step  = 0.0
 
     def forward(self, speed):
 
-        log(INFO, 'Robot >>> forward @ speed = {:3.2f}'.format(speed))
+        log(DEBUG, 'Robot >>> forward @ speed = {:3.2f}'.format(speed))
 
         self.target_speed = speed
 
     def backward(self, speed):
 
-        log(INFO, 'Robot >>> backward @ speed = {:3.2f}'.format(speed))
+        log(DEBUG, 'Robot >>> backward @ speed = {:3.2f}'.format(speed))
 
         self.target_speed = -speed
 
@@ -92,28 +92,40 @@ class Robot:
 
     def left_with_angle(self, angle):
 
-        log(INFO, 'Robot >>> turning left @ angle = {:3.2f}'.format(angle))
+        log(DEBUG, 'Robot >>> turning left @ angle = {:3.2f}'.format(angle))
 
         self.turn_angle_order = self.relative_yaw_angle + angle
         self.turn_speed_step  = TURNING_SPEED_STEP / 2
 
+        # Stay blocked here as long as turn is in progress
+        while self.turn_angle_order != 0:
+            time.sleep(IDLE_LOOP_SLEEP_TIME)
+
+        log(DEBUG, 'Ordered left turn is over')
+
     def right_with_angle(self, angle):
 
-        log(INFO, 'Robot >>> turning right @ angle = {:3.2f}'.format(angle))
+        log(DEBUG, 'Robot >>> turning right @ angle = {:3.2f}'.format(angle))
 
         self.turn_angle_order = self.relative_yaw_angle - angle
         self.turn_speed_step  = -TURNING_SPEED_STEP / 2
 
+        # Stay blocked here as long as turn is in progress
+        while self.turn_angle_order != 0:
+            time.sleep(IDLE_LOOP_SLEEP_TIME)
+
+        log(DEBUG, 'Ordered right turn is over')
+
     def left_with_strength(self, strength):
 
-        log(INFO, 'Robot >>> turning left @ strength = {:3.2f}'.format(strength))
+        log(DEBUG, 'Robot >>> turning left @ strength = {:3.2f}'.format(strength))
 
         self.turn_angle_order = 0.0
         self.turn_speed_step  = strength
 
     def right_with_strength(self, strength):
 
-        log(INFO, 'Robot >>> turning right @ strength = {:3.2f}'.format(strength))
+        log(DEBUG, 'Robot >>> turning right @ strength = {:3.2f}'.format(strength))
 
         self.turn_angle_order = 0.0
         self.turn_speed_step  = -strength
@@ -213,13 +225,9 @@ class Robot:
 
                     self.stop_turn()
 
-                    log(DEBUG, 'Ordered left turn is over')
-
                 elif self.turn_speed_step < 0 and self.relative_yaw_angle < self.turn_angle_order + 3.0:
 
                     self.stop_turn()
-
-                    log(DEBUG, 'Ordered right turn is over')
 
             # ########################## #
             # Overall speeds computation #
@@ -253,5 +261,3 @@ class Robot:
 
             if elapsed_time < POSITION_LOOP_TIME_STEP:
                 time.sleep(POSITION_LOOP_TIME_STEP - elapsed_time)
-            else:
-                log(WARNING, 'Robot thread is late!')

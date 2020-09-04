@@ -2,8 +2,8 @@ import time
 import socket
 import queue
 
-from log import *
-
+from log     import *
+from globals import *
 
 class DataReporter:
 
@@ -38,7 +38,7 @@ class DataReporter:
 
             if self.address is None:
 
-                time.sleep(0.1)
+                time.sleep(IDLE_LOOP_SLEEP_TIME)
 
             else:
 
@@ -74,4 +74,4 @@ class DataReporter:
 
                         else:
 
-                            time.sleep(0.1)
+                            time.sleep(IDLE_LOOP_SLEEP_TIME)

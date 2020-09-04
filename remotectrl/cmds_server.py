@@ -63,11 +63,11 @@ class CommandsServer:
             control.main_mode       = MODE.AVOID_OBSTACLES
             control.is_mode_aborted = False
 
-        elif decoded_data == 'ML':
+        elif decoded_data == 'MA':
 
-            log(DEBUG, 'Received FOLLOW LINE MODE command')
+            log(DEBUG, 'Received ALONG OBSTACLE MODE command')
 
-            control.main_mode       = MODE.FOLLOW_LINE
+            control.main_mode       = MODE.ALONG_OBSTACLE
             control.is_mode_aborted = False
 
         elif decoded_data == 'MC':
@@ -77,11 +77,11 @@ class CommandsServer:
             control.main_mode       = MODE.FOLLOW_CORRIDOR
             control.is_mode_aborted = False
 
-        elif decoded_data == 'MA':
+        elif decoded_data == 'ML':
 
-            log(DEBUG, 'Received ALONG OBSTACLE MODE command')
+            log(DEBUG, 'Received FOLLOW LINE MODE command')
 
-            control.main_mode       = MODE.ALONG_OBSTACLE
+            control.main_mode       = MODE.FOLLOW_LINE
             control.is_mode_aborted = False
 
         elif decoded_data == 'CD':
