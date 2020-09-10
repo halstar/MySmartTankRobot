@@ -4,6 +4,7 @@ import threading
 import time
 import RPi.GPIO
 import picamera
+import picamera.array
 import robot
 import dcmotor
 import encoder
@@ -12,12 +13,20 @@ import lidar
 import pid
 import remotectrl
 import streamer
+import cv2
+import math
+import numpy
 
 from pantilt import *
 from globals import *
 from log     import *
 
-setup_data = None
+setup_data          = None
+camera_image_mutex  = None
+patched_image_mutex = None
+camera_image        = None
+patched_image       = None
+line_threshold      = LINE_FOLLOWING_DEFAULT_THRESHOLD
 
 
 def robot_control_thread(robot):
@@ -449,7 +458,7 @@ def run_corridor_following(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
 
         if -CORRIDOR_FOLLOWING_PRECISION < delta_distance < CORRIDOR_FOLLOWING_PRECISION:
 
-            log(DEBUG, 'Correctlry centered in corridor: moving on...')
+            log(DEBUG, 'Correctly centered in corridor: moving on...')
 
             robot.stop_turn()
 
@@ -473,11 +482,89 @@ def run_corridor_following(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
 
 def run_line_following(robot):
 
+    global camera_image_mutex, camera_image, patched_image, line_threshold
+
     log(INFO, 'Starting line following mode')
 
-    while (control.main_mode == MODE.FOLLOW_LINE) and (control.is_mode_aborted == False):
+    kernel = numpy.ones((5, 5), numpy.uint8)
 
-        time.sleep(IDLE_LOOP_SLEEP_TIME)
+    while control.main_mode == MODE.FOLLOW_LINE:
+
+        robot.forward(TARGET_SPEED_STEP)
+
+        # Deal with startup, when no camera image is ready yet
+        if camera_image is None:
+            continue
+
+        patched_image_mutex.acquire()
+        camera_image_mutex.acquire()
+
+        patched_image = camera_image.copy()
+
+        # Turn image to gray and apply threshold
+        gray_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2GRAY)
+        cv2.rectangle(gray_image, (0, 0), (367, 179), (255, 255, 255), -1)
+        return_value, thresholded = cv2.threshold(gray_image, line_threshold, 255, cv2.THRESH_BINARY_INV)
+
+        # Remove some possible noise
+        thresholded = cv2.morphologyEx(thresholded, cv2.MORPH_OPEN, kernel)
+
+        # Get contours
+        contours, hierarchy = cv2.findContours(thresholded, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+        highest_area     = 0.0
+        selected_contour = None
+
+        # Keep biggest contour only
+        for contour in contours:
+            if cv2.contourArea(contour) > highest_area and len(contour) > 5:
+                selected_contour = contour
+
+        if selected_contour is None:
+
+            log(WARNING, 'Found no contour')
+
+        else:
+
+            # Get and draw ellipse and angle of selected contour
+            ellipse = cv2.fitEllipse(selected_contour)
+            (ellipse_x, ellipse_y), (diameter_1, diameter_2), angle = ellipse
+            major_radius = max(diameter_1, diameter_2) / 2
+
+            if angle > 90:
+                angle = angle - 90
+            else:
+                angle = angle + 90
+
+            top_x    = ellipse_x + math.cos(math.radians(angle)) * major_radius
+            top_y    = ellipse_y + math.sin(math.radians(angle)) * major_radius
+            bottom_x = ellipse_x + math.cos(math.radians(angle + 180)) * major_radius
+            bottom_y = ellipse_y + math.sin(math.radians(angle + 180)) * major_radius
+
+            patched_image = cv2.ellipse(patched_image, ellipse, (0, 255, 0), 2)
+            cv2.line   (patched_image, (int(top_x), int(top_y)), (int(bottom_x), int(bottom_y)), (255, 255, 255), 1)
+            cv2.putText(patched_image, '{:06.2f}'.format(angle), (10, 230), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 1, cv2.FILLED)
+
+            if -LINE_FOLLOWING_ANGLE_PRECISION < angle - 90  < LINE_FOLLOWING_ANGLE_PRECISION:
+
+                log(DEBUG, 'Correctly aligned with line: moving on...')
+
+                robot.stop_turn()
+
+            elif angle < 90:
+
+                log(DEBUG, 'Going away from line: correcting to the left...')
+
+                robot.left_with_strength(16)
+
+            else:
+
+                log(DEBUG, 'Going away from line: correcting to the right...')
+
+                robot.right_with_strength(16)
+
+        camera_image_mutex.release()
+        patched_image_mutex.release()
 
     robot.stop()
 
@@ -590,29 +677,53 @@ def data_reporter_thread(data_reporter):
 
 def camera_control_thread():
 
-    global setup_data
+    global setup_data, camera_image_mutex, patched_image_mutex, camera_image, patched_image
 
     log(INFO, 'Initiating camera control thread')
 
     camera = picamera.PiCamera(resolution = str(setup_data['CAMERA_IMAGE_WIDTH']) + 'x' + str(setup_data['CAMERA_IMAGE_HEIGHT']), framerate=25)
 
-    is_camera_recording = False
+    raw_buffer = picamera.array.PiRGBArray(camera, size=(setup_data['CAMERA_IMAGE_WIDTH'], setup_data['CAMERA_IMAGE_HEIGHT']))
 
     while True:
 
-        if control.display_mode == DISPLAY.CAMERA and not is_camera_recording == True:
+        if control.display_mode == DISPLAY.CAMERA:
 
             log(INFO, 'Camera starting to record')
 
-            camera.start_recording(streamer.streaming_output, format='mjpeg')
-            is_camera_recording = True
+            # Continuously Capture frames from the camera
+            for frame in camera.capture_continuous(raw_buffer, format = 'bgr', use_video_port = True):
 
-        elif control.display_mode != DISPLAY.CAMERA and is_camera_recording == True:
+                camera_image_mutex.acquire()
+
+                # Deal with one captured image
+                camera_image = frame.array
+
+                camera_image_mutex.release()
+
+                # Clear raw buffer in preparation for the next frame
+                raw_buffer.truncate(0)
+
+                # Use patched image in line following mode only
+                if control.main_mode != MODE.FOLLOW_LINE:
+                    patched_image = camera_image.copy()
+                # Deal with startup, when no patched image is ready yet
+                elif patched_image is None:
+                    continue
+
+                patched_image_mutex.acquire()
+
+                # Prepare image for streaming
+                return_value, buffer = cv2.imencode('.jpg', patched_image)
+
+                patched_image_mutex.release()
+
+                streamer.streaming_output.write(bytearray(buffer))
+
+                if control.display_mode != DISPLAY.CAMERA:
+                    break
 
             log(INFO, 'Camera stopping to record')
-
-            camera.stop_recording()
-            is_camera_recording = False
 
         else:
 
@@ -677,6 +788,7 @@ def print_help():
     print('Enter forward/backward speed   value like: s=50')
     print('Enter left/right turn angle    value like: a=-30')
     print('Enter left/right turn strength value like: g=15')
+    print('Enter line following threshold value like: t=20')
     print('')
     print('Enter front pan  angle value like: fp=50')
     print('Enter front tilt angle value like: ft=-25')
@@ -699,6 +811,8 @@ def print_help():
 
 
 def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, front_lidar, back_pan_tilt, back_lidar, speed_pid_controller):
+
+    global line_threshold
 
     print_help()
 
@@ -822,6 +936,8 @@ def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, f
                     robot.right_with_strength(-value)
                 else:
                     robot.left_with_strength(value)
+            elif command == 't':
+                line_threshold = value
 
         elif len(user_input) > 2 and user_input[2] == '=':
 
@@ -837,14 +953,18 @@ def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, f
             elif command == 'bt':
                 back_pan_tilt.set_tilt(value)
 
+
 def main():
 
-    global setup_data
+    global setup_data, camera_image_mutex, patched_image_mutex
 
     with open(SETUP_FILE, 'r') as json_file:
         setup_data = json.load(json_file)
 
     log_init(setup_data['LOG_LEVEL'])
+
+    camera_image_mutex  = threading.Lock()
+    patched_image_mutex = threading.Lock()
 
     if setup_data['START_CONSOLE'] == 1:
         os.system('clear')

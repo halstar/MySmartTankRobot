@@ -6,7 +6,7 @@
     "CAMERA_STREAMING_PORT"        : 8000,
     "DATA_REPORTING_PORT"          : 54321,
 
-    "CAMERA_IMAGE_WIDTH"           : 360,
+    "CAMERA_IMAGE_WIDTH"           : 368,
     "CAMERA_IMAGE_HEIGHT"          : 240,
 
     "ACCELERATION_X_OFFSET"        : 1,
