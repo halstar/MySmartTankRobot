@@ -74,8 +74,9 @@ class CommandsServer:
 
             log(DEBUG, 'Received FOLLOW CORRIDOR MODE command')
 
-            control.main_mode       = MODE.FOLLOW_CORRIDOR
-            control.is_mode_aborted = False
+            control.main_mode           = MODE.FOLLOW_CORRIDOR
+            control.is_mode_aborted     = False
+            control.is_u_turn_requested = False
 
         elif decoded_data == 'ML':
 
@@ -83,6 +84,12 @@ class CommandsServer:
 
             control.main_mode       = MODE.FOLLOW_LINE
             control.is_mode_aborted = False
+
+        elif decoded_data == 'UT':
+
+            log(DEBUG, 'Received FOLLOW CORRIDOR U-TURN command')
+
+            control.is_u_turn_requested = True
 
         elif decoded_data == 'CD':
 
@@ -106,25 +113,25 @@ class CommandsServer:
 
             log(DEBUG, 'Received LEFT 1 command')
 
-            self.robot.left_with_angle(TURNING_ANGLE_STEP * 1)
+            self.robot.left_with_angle(TURNING_ANGLE_STEP * 1, True)
 
         elif decoded_data == 'L2':
 
             log(DEBUG, 'Received LEFT 2 command')
 
-            self.robot.left_with_angle(TURNING_ANGLE_STEP * 2)
+            self.robot.left_with_angle(TURNING_ANGLE_STEP * 2, True)
 
         elif decoded_data == 'R1':
 
             log(DEBUG, 'Received RIGHT 1 command')
 
-            self.robot.right_with_angle(TURNING_ANGLE_STEP * 1)
+            self.robot.right_with_angle(TURNING_ANGLE_STEP * 1, True)
 
         elif decoded_data == 'R2':
 
             log(DEBUG, 'Received RIGHT 2 command')
 
-            self.robot.right_with_angle(TURNING_ANGLE_STEP * 2)
+            self.robot.right_with_angle(TURNING_ANGLE_STEP * 2, True)
 
         elif decoded_data == 'F1':
 

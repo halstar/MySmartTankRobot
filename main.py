@@ -26,7 +26,6 @@ camera_image_mutex  = None
 patched_image_mutex = None
 camera_image        = None
 patched_image       = None
-line_threshold      = LINE_FOLLOWING_DEFAULT_THRESHOLD
 
 
 def robot_control_thread(robot):
@@ -150,11 +149,11 @@ def run_obstacles_avoidance(robot, front_pan_tilt, front_lidar, back_pan_tilt, b
 
     if farthest_obstacle_angle < 0:
 
-        robot.right_with_angle(-farthest_obstacle_angle)
+        robot.right_with_angle(-farthest_obstacle_angle, True)
 
     else:
 
-        robot.left_with_angle(farthest_obstacle_angle)
+        robot.left_with_angle(farthest_obstacle_angle, True)
 
     # ############################## #
     #  Now start avoiding obstacles  #
@@ -188,11 +187,11 @@ def run_obstacles_avoidance(robot, front_pan_tilt, front_lidar, back_pan_tilt, b
 
             if farthest_obstacle_angle < 0:
 
-                robot.right_with_angle(-farthest_obstacle_angle)
+                robot.right_with_angle(-farthest_obstacle_angle, True)
 
             else:
 
-                robot.left_with_angle(farthest_obstacle_angle)
+                robot.left_with_angle(farthest_obstacle_angle, True)
 
             log(INFO, 'Aiming at the farthest obstacle')
 
@@ -255,11 +254,11 @@ def run_along_obstacle(robot, front_pan_tilt, front_lidar, back_pan_tilt, back_l
 
         if -90 < closest_obstacle_angle < 0:
 
-            robot.left_with_angle(90 + closest_obstacle_angle)
+            robot.left_with_angle(90 + closest_obstacle_angle, True)
 
         else:
 
-            robot.right_with_angle(-closest_obstacle_angle - 90)
+            robot.right_with_angle(-closest_obstacle_angle - 90, True)
 
     else:
 
@@ -269,11 +268,11 @@ def run_along_obstacle(robot, front_pan_tilt, front_lidar, back_pan_tilt, back_l
 
         if 0 < closest_obstacle_angle < 90:
 
-            robot.right_with_angle(90 - closest_obstacle_angle)
+            robot.right_with_angle(90 - closest_obstacle_angle, True)
 
         else:
 
-            robot.left_with_angle(closest_obstacle_angle - 90)
+            robot.left_with_angle(closest_obstacle_angle - 90, True)
 
     log(INFO, 'Now parallel to the closest obstacle')
 
@@ -310,11 +309,11 @@ def run_along_obstacle(robot, front_pan_tilt, front_lidar, back_pan_tilt, back_l
 
             if is_obstacle_on_the_right == True:
 
-                robot.left_with_angle(90)
+                robot.left_with_angle(90, True)
 
             else:
 
-                robot.right_with_angle(90)
+                robot.right_with_angle(90, True)
 
             log(INFO, 'Ready to restart along obstacle')
 
@@ -326,11 +325,11 @@ def run_along_obstacle(robot, front_pan_tilt, front_lidar, back_pan_tilt, back_l
 
             if is_obstacle_on_the_right == True:
 
-                robot.right_with_angle(45)
+                robot.right_with_angle(45, True)
 
             else:
 
-                robot.left_with_angle(45)
+                robot.left_with_angle(45, True)
 
             robot.forward(TARGET_SPEED_STEP)
 
@@ -396,11 +395,11 @@ def run_corridor_following(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
 
     if closest_obstacle_angle < 0:
 
-        robot.right_with_angle(-closest_obstacle_angle)
+        robot.right_with_angle(-closest_obstacle_angle, True)
 
     else:
 
-        robot.left_with_angle(closest_obstacle_angle)
+        robot.left_with_angle(closest_obstacle_angle, True)
 
     log(INFO, 'Now aiming at the closest obstacle')
 
@@ -435,7 +434,7 @@ def run_corridor_following(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
     # Get into the forward direction #
     # ############################## #
 
-    robot.right_with_angle(90)
+    robot.right_with_angle(90, True)
 
     log(INFO, 'Ready to move in corridor')
 
@@ -456,7 +455,16 @@ def run_corridor_following(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
 
         delta_distance = left_wall_distance - right_wall_distance
 
-        if -CORRIDOR_FOLLOWING_PRECISION < delta_distance < CORRIDOR_FOLLOWING_PRECISION:
+        if control.is_u_turn_requested == True:
+
+            log(DEBUG, 'Performing u-turn as per requested')
+
+            robot.stop()
+            robot.right_with_angle(180, True)
+
+            control.is_u_turn_requested = False
+
+        elif -CORRIDOR_FOLLOWING_PRECISION < delta_distance < CORRIDOR_FOLLOWING_PRECISION:
 
             log(DEBUG, 'Correctly centered in corridor: moving on...')
 
@@ -480,17 +488,58 @@ def run_corridor_following(robot, front_pan_tilt, front_lidar, back_pan_tilt, ba
     back_pan_tilt.reset ()
 
 
+def get_best_shape(input_image, mask_top_left_corner, mask_bottom_rigt_corner, threshold):
+
+    gray_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
+
+    cv2.rectangle(gray_image, mask_top_left_corner, mask_bottom_rigt_corner, (255, 255, 255), -1)
+    return_value, thresholded = cv2.threshold(gray_image, threshold, 255, cv2.THRESH_BINARY_INV)
+
+    # Get contours
+    contours, hierarchy = cv2.findContours(thresholded, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    highest_area     = 0.0
+    selected_contour = None
+
+    # Keep biggest contour only
+    for contour in contours:
+
+        contour_area = cv2.contourArea(contour)
+
+        if cv2.contourArea(contour) > highest_area:
+            highest_area = contour_area
+            selected_contour = contour
+
+    if highest_area < 500:
+        selected_contour = None
+
+    return selected_contour, thresholded
+
+
 def run_line_following(robot):
 
-    global camera_image_mutex, camera_image, patched_image, line_threshold
+    global camera_image_mutex, camera_image, patched_image
 
     log(INFO, 'Starting line following mode')
 
-    kernel = numpy.ones((5, 5), numpy.uint8)
+    # ################################ #
+    #  Read reference stop and u-turn  #
+    # images and shapes, for later use #
+    # ################################ #
+
+    stop_image   = cv2.imread('stop.png'  , 0)
+    u_turn_image = cv2.imread('u-turn.png', 0)
+
+    return_value, stop_thresholded   = cv2.threshold(stop_image  , 127, 255, 0)
+    return_value, u_turn_thresholded = cv2.threshold(u_turn_image, 127, 255, 0)
+
+    stop_contours  , hierarchy = cv2.findContours(stop_thresholded  , cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    u_turn_contours, hierarchy = cv2.findContours(u_turn_thresholded, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    stop_contour   = stop_contours  [0]
+    u_turn_contour = u_turn_contours[0]
 
     while control.main_mode == MODE.FOLLOW_LINE:
-
-        robot.forward(TARGET_SPEED_STEP)
 
         # Deal with startup, when no camera image is ready yet
         if camera_image is None:
@@ -501,33 +550,89 @@ def run_line_following(robot):
 
         patched_image = camera_image.copy()
 
-        # Turn image to gray and apply threshold
-        gray_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2GRAY)
-        cv2.rectangle(gray_image, (0, 0), (367, 179), (255, 255, 255), -1)
-        return_value, thresholded = cv2.threshold(gray_image, line_threshold, 255, cv2.THRESH_BINARY_INV)
+        # Turn image to gray, separate lower and upper parts, apply threshold & get best shape
+        lower_part_shape, thresholded_image = get_best_shape(patched_image, (0,   0), (367, 179), control.line_threshold)
+        upper_part_shape, thresholded_image = get_best_shape(patched_image, (0, 180), (367, 239), control.line_threshold)
 
-        # Remove some possible noise
-        thresholded = cv2.morphologyEx(thresholded, cv2.MORPH_OPEN, kernel)
+        # Draw a line to show separation between lower and upper parts
+        cv2.line(patched_image, (0, 180), (367, 180), (255, 255, 255), 1)
 
-        # Get contours
-        contours, hierarchy = cv2.findContours(thresholded, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        stop_matches   = False
+        u_turn_matches = False
 
-        highest_area     = 0.0
-        selected_contour = None
+        stop_draw_color   = (255, 255, 255)
+        u_turn_draw_color = (255, 255, 255)
+        sign_draw_color   = (255, 255, 255)
 
-        # Keep biggest contour only
-        for contour in contours:
-            if cv2.contourArea(contour) > highest_area and len(contour) > 5:
-                selected_contour = contour
+        # ############################# #
+        # Deal with upper part of image #
+        # ############################# #
 
-        if selected_contour is None:
+        if upper_part_shape is None:
 
-            log(WARNING, 'Found no contour')
+            log(DEBUG, 'Found no shape in upper part')
 
         else:
 
-            # Get and draw ellipse and angle of selected contour
-            ellipse = cv2.fitEllipse(selected_contour)
+            # Get and draw rotated rectangle of upper shape
+            rectangle = cv2.minAreaRect(upper_part_shape)
+            box = cv2.boxPoints(rectangle)
+            box = numpy.int0(box)
+
+            # Try and match shape with stop sign
+            stop_match_value = cv2.matchShapes(upper_part_shape, stop_contour, cv2.CONTOURS_MATCH_I1, 0)
+
+            if stop_match_value < 1.00:
+
+                log(DEBUG, 'Found STOP sign')
+
+                robot.stop()
+
+                stop_matches    = True
+                stop_draw_color = (0, 255, 0)
+                sign_draw_color = (0, 255, 0)
+
+            # Try and match shape with u-turn sign
+            u_turn_match_value = cv2.matchShapes(upper_part_shape, u_turn_contour, cv2.CONTOURS_MATCH_I1, 0)
+
+            if u_turn_match_value < 1.00:
+
+                log(DEBUG, 'Found U-TURN sign')
+
+                robot.left_with_angle(180, False)
+
+                u_turn_matches    = True
+                u_turn_draw_color = (0, 255, 0)
+                sign_draw_color   = (0, 255, 0)
+
+            cv2.putText(patched_image, 'Stop   @ {:04.2f}'.format(stop_match_value  ), (10, 20), cv2.FONT_HERSHEY_PLAIN, 1, stop_draw_color  , 1, cv2.FILLED)
+            cv2.putText(patched_image, 'U-turn @ {:04.2f}'.format(u_turn_match_value), (10, 40), cv2.FONT_HERSHEY_PLAIN, 1, u_turn_draw_color, 1, cv2.FILLED)
+
+            patched_image = cv2.drawContours(patched_image, [box], 0, sign_draw_color, 2)
+
+        # ############################# #
+        # Deal with lower part of image #
+        # ############################# #
+
+        if stop_matches == True or u_turn_matches == True:
+
+           # Nothing to do
+           pass
+
+        elif lower_part_shape is None:
+
+            log(DEBUG, 'Found no shape in lower part')
+
+            robot.stop()
+
+        elif len(lower_part_shape) < 5:
+
+            log(DEBUG, 'Found malformed shape in lower part')
+
+        else:
+
+            # Get and draw ellipse and angle of lower shape
+            ellipse = cv2.fitEllipse(lower_part_shape)
             (ellipse_x, ellipse_y), (diameter_1, diameter_2), angle = ellipse
             major_radius = max(diameter_1, diameter_2) / 2
 
@@ -541,27 +646,32 @@ def run_line_following(robot):
             bottom_x = ellipse_x + math.cos(math.radians(angle + 180)) * major_radius
             bottom_y = ellipse_y + math.sin(math.radians(angle + 180)) * major_radius
 
-            patched_image = cv2.ellipse(patched_image, ellipse, (0, 255, 0), 2)
-            cv2.line   (patched_image, (int(top_x), int(top_y)), (int(bottom_x), int(bottom_y)), (255, 255, 255), 1)
-            cv2.putText(patched_image, '{:06.2f}'.format(angle), (10, 230), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 1, cv2.FILLED)
+            robot.forward(20)
+
+            draw_color = (0, 0, 255)
 
             if -LINE_FOLLOWING_ANGLE_PRECISION < angle - 90  < LINE_FOLLOWING_ANGLE_PRECISION:
 
                 log(DEBUG, 'Correctly aligned with line: moving on...')
 
                 robot.stop_turn()
+                draw_color = (0, 255, 0)
 
             elif angle < 90:
 
                 log(DEBUG, 'Going away from line: correcting to the left...')
 
-                robot.left_with_strength(16)
+                robot.left_with_strength(8)
 
             else:
 
                 log(DEBUG, 'Going away from line: correcting to the right...')
 
-                robot.right_with_strength(16)
+                robot.right_with_strength(8)
+
+            patched_image = cv2.ellipse(patched_image, ellipse, draw_color, 2)
+            cv2.line   (patched_image, (int(top_x), int(top_y)), (int(bottom_x), int(bottom_y)), (255, 255, 255), 1)
+            cv2.putText(patched_image, 'Angle: {:06.2f}'.format(angle), (10, 230), cv2.FONT_HERSHEY_PLAIN, 1, draw_color, 1, cv2.FILLED)
 
         camera_image_mutex.release()
         patched_image_mutex.release()
@@ -812,8 +922,6 @@ def print_help():
 
 def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, front_lidar, back_pan_tilt, back_lidar, speed_pid_controller):
 
-    global line_threshold
-
     print_help()
 
     is_console_on = True
@@ -860,6 +968,8 @@ def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, f
                 print('')
                 front_lidar.print_info('FRONT LIDAR')
                 back_lidar.print_info ('BACK  LIDAR')
+                print('')
+                print('Line following threshold: {}'.format(control.line_threshold))
                 print('')
             elif command == 'q':
                 print('')
@@ -928,16 +1038,16 @@ def console_thread(robot, left_motor, right_motor, imu_device, front_pan_tilt, f
                     robot.stop()
             elif command == 'a':
                 if value < 0:
-                    robot.right_with_angle(-value)
+                    robot.right_with_angle(-value, True)
                 else:
-                    robot.left_with_angle(value)
+                    robot.left_with_angle(value, True)
             elif command == 'g':
                 if value < 0:
                     robot.right_with_strength(-value)
                 else:
                     robot.left_with_strength(value)
             elif command == 't':
-                line_threshold = value
+                control.line_threshold = value
 
         elif len(user_input) > 2 and user_input[2] == '=':
 
@@ -969,17 +1079,20 @@ def main():
     if setup_data['START_CONSOLE'] == 1:
         os.system('clear')
         print('')
-        print('     |     /=*|||||||||*=\     | ')
-        print('     |-----|-------------|-----| ')
-        print('     |  /- /(O) ------- (O)\   | ')
-        print('     | ||  \   -| (*) |-   /   | ')
-        print('     |-----|-------------|-----| ')
-        print('     |/ / / / / /   \ \ \ \ \  | ')
-        print('     /-----\  ||     ||  /-----\ ')
-        print('     |- - -|*****   *****|- - -| ')
-        print('     |-----|*****   *****|-----| ')
-        print('     |- - -|             |- - -| ')
-        print('     \-----/             \-----/ ')
+        print('***** STARTING MY SMART TANK ROBOT CONTROL  *****')
+        print('')
+        print('                   /---\            ')
+        print('                   | * | -\         ')
+        print('          /--------\| |/  |         ')
+        print('       //---------- |||  |/         ')
+        print('     |-----|--------===-----|-----| ')
+        print('     |  /-------/|//|\|\|------\  | ')
+        print('     | ||     (O) --(*)-- (O)   \ | ')
+        print('     |-----|----------------|-----| ')
+        print('     /-----\  ||        ||  /-----\ ')
+        print('     |- - -|*****      *****|- - -| ')
+        print('     |- - -|*****      *****|- - -| ')
+        print('     \-----/                \-----/ ')
         print('')
 
     if setup_data['START_CONSOLE'] == 1:
