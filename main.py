@@ -614,12 +614,12 @@ def run_line_following(robot):
         # Deal with lower part of image #
         # ############################# #
 
-        if stop_matches == True or u_turn_matches == True:
+        # if stop_matches == True or u_turn_matches == True:
 
            # Nothing to do
-           pass
+        #   pass
 
-        elif lower_part_shape is None:
+        if lower_part_shape is None:
 
             log(DEBUG, 'Found no shape in lower part')
 
