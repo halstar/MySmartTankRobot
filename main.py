@@ -14,7 +14,6 @@ import pid
 import remotectrl
 import streamer
 import cv2
-import math
 import numpy
 
 from pantilt import *
@@ -541,34 +540,38 @@ def run_line_following(robot):
     stop_contour   = stop_contours  [0]
     u_turn_contour = u_turn_contours[0]
 
+    was_center_on_the_left = None
+
     while control.main_mode == MODE.FOLLOW_LINE:
 
         # Deal with startup, when no camera image is ready yet
         if camera_image is None:
             continue
 
-        patched_image_mutex.acquire()
         camera_image_mutex.acquire()
+        patched_image_mutex.acquire()
 
         patched_image = camera_image.copy()
 
+        camera_image_mutex.release()
+
         # Turn image to gray, separate lower and upper parts, apply threshold & get best shape
-        lower_part_shape, thresholded_image = get_best_shape(patched_image, (0,   0), (367, 179), control.line_threshold)
-        upper_part_shape, thresholded_image = get_best_shape(patched_image, (0, 180), (367, 239), control.line_threshold)
+        lower_part_shape, thresholded_image = get_best_shape(patched_image, (0,   0), (367, 169), control.line_threshold)
+        upper_part_shape, thresholded_image = get_best_shape(patched_image, (0, 170), (367, 239), control.line_threshold)
 
         # Draw a line to show separation between lower and upper parts
-        cv2.line(patched_image, (0, 180), (367, 180), (255, 255, 255), 1)
-
-        stop_matches   = False
-        u_turn_matches = False
-
-        stop_draw_color   = (255, 255, 255)
-        u_turn_draw_color = (255, 255, 255)
-        sign_draw_color   = (255, 255, 255)
+        cv2.line(patched_image, (0, 170), (367, 170), (255, 255, 255), 1)
 
         # ############################# #
         # Deal with upper part of image #
         # ############################# #
+
+        got_a_stop_match   = False
+        got_a_u_turn_match = False
+
+        stop_draw_color   = (255, 255, 255)
+        u_turn_draw_color = (255, 255, 255)
+        sign_draw_color   = (255, 255, 255)
 
         if upper_part_shape is None:
 
@@ -576,107 +579,148 @@ def run_line_following(robot):
 
         else:
 
-            # Get and draw rotated rectangle of upper shape
+            # Get rotated rectangle of upper shape
             rectangle = cv2.minAreaRect(upper_part_shape)
             box = cv2.boxPoints(rectangle)
             box = numpy.int0(box)
 
-            # Try and match shape with stop sign
+            # Compute match of that shape against stop sign
             stop_match_value = cv2.matchShapes(upper_part_shape, stop_contour, cv2.CONTOURS_MATCH_I1, 0)
 
-            if stop_match_value < 1.00:
+            # Compute match of that shape against u-turn sign
+            u_turn_match_value = cv2.matchShapes(upper_part_shape, u_turn_contour, cv2.CONTOURS_MATCH_I1, 0)
+
+            # Deal with upper part shape against stop sign
+            if stop_match_value < 0.50:
 
                 log(DEBUG, 'Found STOP sign')
 
-                robot.stop()
+                got_a_stop_match = True
+                stop_draw_color  = (0, 255, 0)
+                sign_draw_color  = (0, 255, 0)
 
-                stop_matches    = True
-                stop_draw_color = (0, 255, 0)
-                sign_draw_color = (0, 255, 0)
-
-            # Try and match shape with u-turn sign
-            u_turn_match_value = cv2.matchShapes(upper_part_shape, u_turn_contour, cv2.CONTOURS_MATCH_I1, 0)
-
-            if u_turn_match_value < 1.00:
+            # Deal with upper part shape against u-turn sign
+            if u_turn_match_value < 0.75:
 
                 log(DEBUG, 'Found U-TURN sign')
 
-                robot.left_with_angle(180, False)
+                got_a_u_turn_match = True
+                u_turn_draw_color  = (0, 255, 0)
+                sign_draw_color    = (0, 255, 0)
 
-                u_turn_matches    = True
-                u_turn_draw_color = (0, 255, 0)
-                sign_draw_color   = (0, 255, 0)
-
-            cv2.putText(patched_image, 'Stop   @ {:04.2f}'.format(stop_match_value  ), (10, 20), cv2.FONT_HERSHEY_PLAIN, 1, stop_draw_color  , 1, cv2.FILLED)
+            cv2.putText(patched_image, 'Stop @ {:04.2f}'.format  (stop_match_value  ), (10, 20), cv2.FONT_HERSHEY_PLAIN, 1, stop_draw_color  , 1, cv2.FILLED)
             cv2.putText(patched_image, 'U-turn @ {:04.2f}'.format(u_turn_match_value), (10, 40), cv2.FONT_HERSHEY_PLAIN, 1, u_turn_draw_color, 1, cv2.FILLED)
 
+            # Draw rotated rectangle of upper shape
             patched_image = cv2.drawContours(patched_image, [box], 0, sign_draw_color, 2)
 
         # ############################# #
         # Deal with lower part of image #
         # ############################# #
 
-        # if stop_matches == True or u_turn_matches == True:
-
-           # Nothing to do
-        #   pass
-
-        if lower_part_shape is None:
-
-            log(DEBUG, 'Found no shape in lower part')
-
-            robot.stop()
-
-        elif len(lower_part_shape) < 5:
+        # Ignore a malformed shape; consider it as if no shape was found
+        if lower_part_shape is not None and len(lower_part_shape) < 5:
 
             log(DEBUG, 'Found malformed shape in lower part')
 
+            lower_part_shape = None
+
+        if lower_part_shape is None:
+
+            log(DEBUG, 'Found no actual shape in lower part')
+
+            patched_image_mutex.release()
+
+            robot.stop()
+
+            # Deal with upper part shape against stop sign
+            if got_a_stop_match == True:
+
+                log(DEBUG, 'Executing STOP sign')
+
+                # No need to stop robot at it's already stopped
+                was_center_on_the_left = None
+
+            # Deal with upper part shape against u-turn sign
+            elif got_a_u_turn_match == True:
+
+                log(DEBUG, 'Executing U-TURN sign')
+
+                robot.left_with_angle(180, True)
+                robot.stop_for_period(1.0)
+                was_center_on_the_left = not(was_center_on_the_left)
+
+            # Try and get back on the track; this first test deals with startup
+            elif was_center_on_the_left is None:
+
+                pass
+
+            elif was_center_on_the_left == True:
+
+                log(DEBUG, 'Last known position of line was on the left: correcting to the left')
+
+                robot.left_step()
+                robot.stop_for_period(0.2)
+
+            else:
+
+                log(DEBUG, 'Last known position of line was on the right: correcting to the right')
+
+                robot.right_step()
+                robot.stop_for_period(0.2)
+
         else:
 
-            # Get and draw ellipse and angle of lower shape
-            ellipse = cv2.fitEllipse(lower_part_shape)
-            (ellipse_x, ellipse_y), (diameter_1, diameter_2), angle = ellipse
-            major_radius = max(diameter_1, diameter_2) / 2
+            log(DEBUG, 'Found an actual shape in lower part')
 
-            if angle > 90:
-                angle = angle - 90
+            # Get rotated rectangle of lower shape
+            rectangle = cv2.minAreaRect(lower_part_shape)
+            box = cv2.boxPoints(rectangle)
+            box = numpy.int0(box)
+
+            # Ge the center of lower shape
+            M = cv2.moments(lower_part_shape)
+            center_x = int(M["m10"] / M["m00"])
+            center_y = int(M["m01"] / M["m00"])
+
+            if center_x < 183:
+                was_center_on_the_left = True
             else:
-                angle = angle + 90
+                was_center_on_the_left = False
 
-            top_x    = ellipse_x + math.cos(math.radians(angle)) * major_radius
-            top_y    = ellipse_y + math.sin(math.radians(angle)) * major_radius
-            bottom_x = ellipse_x + math.cos(math.radians(angle + 180)) * major_radius
-            bottom_y = ellipse_y + math.sin(math.radians(angle + 180)) * major_radius
+            if 113 < center_x  < 253:
+                center_draw_color = (0, 255, 0)
+            else:
+                center_draw_color = (0, 0, 255)
 
-            robot.forward(20)
+            # Draw rotated rectangle and center of lower shape
+            patched_image = cv2.drawContours(patched_image, [box], 0, center_draw_color, 2)
+            cv2.circle (patched_image, (center_x, center_y), 5, center_draw_color, -1)
+            cv2.putText(patched_image, 'Center: {:03}'.format(center_x), (250, 230), cv2.FONT_HERSHEY_PLAIN, 1, center_draw_color, 1, cv2.FILLED)
 
-            draw_color = (0, 0, 255)
+            patched_image_mutex.release()
 
-            if -LINE_FOLLOWING_ANGLE_PRECISION < angle - 90  < LINE_FOLLOWING_ANGLE_PRECISION:
+            # Implement line following based on lower part lateral position
+            if 113 < center_x  < 253:
 
-                log(DEBUG, 'Correctly aligned with line: moving on...')
+                log(DEBUG, 'Correctly aligned with line: moving on')
 
-                robot.stop_turn()
-                draw_color = (0, 255, 0)
+                robot.forward_step()
+                robot.stop_for_period(0.2)
 
-            elif angle < 90:
+            elif center_x < 113:
 
-                log(DEBUG, 'Going away from line: correcting to the left...')
+                log(DEBUG, 'Going away from line: correcting to the left')
 
-                robot.left_with_strength(LEFT_RIGHT_TURN_STRENGTH / 2)
+                robot.left_step()
+                robot.stop_for_period(0.2)
 
             else:
 
-                log(DEBUG, 'Going away from line: correcting to the right...')
+                log(DEBUG, 'Going away from line: correcting to the right')
 
-                robot.right_with_strength(LEFT_RIGHT_TURN_STRENGTH / 2)
-
-            patched_image = cv2.ellipse(patched_image, ellipse, draw_color, 2)
-            cv2.line   (patched_image, (int(top_x), int(top_y)), (int(bottom_x), int(bottom_y)), (255, 255, 255), 1)
-            cv2.putText(patched_image, 'Angle: {:06.2f}'.format(angle), (10, 230), cv2.FONT_HERSHEY_PLAIN, 1, draw_color, 1, cv2.FILLED)
-
-        camera_image_mutex.release()
-        patched_image_mutex.release()
+                robot.right_step()
+                robot.stop_for_period(0.2)
 
     robot.stop()
 
@@ -811,10 +855,12 @@ def camera_control_thread():
                 # Deal with one captured image
                 camera_image = frame.array
 
-                camera_image_mutex.release()
-
                 # Clear raw buffer in preparation for the next frame
                 raw_buffer.truncate(0)
+
+                camera_image_mutex.release()
+
+                patched_image_mutex.acquire()
 
                 # Use patched image in line following mode only
                 if control.main_mode != MODE.FOLLOW_LINE:
@@ -822,8 +868,6 @@ def camera_control_thread():
                 # Deal with startup, when no patched image is ready yet
                 elif patched_image is None:
                     continue
-
-                patched_image_mutex.acquire()
 
                 # Prepare image for streaming
                 return_value, buffer = cv2.imencode('.jpg', patched_image)
@@ -836,6 +880,47 @@ def camera_control_thread():
                     break
 
             log(INFO, 'Camera stopping to record')
+
+        else:
+
+            time.sleep(IDLE_LOOP_SLEEP_TIME)
+
+
+def encoding_thread():
+
+    global patched_image_mutex, patched_image
+
+    log(INFO, 'Initiating encoding thread')
+
+    while True:
+
+        if control.display_mode == DISPLAY.CAMERA:
+
+            patched_image_mutex.acquire()
+
+            # Deal with startup, when no patched image is ready yet
+            if camera_image is None:
+                log(DEBUG, 'No camera image to encode')
+                patched_image_mutex.release()
+                continue
+            # Use patched image in line following mode only
+            elif control.main_mode != MODE.FOLLOW_LINE:
+                patched_image = camera_image.copy()
+            # Deal with startup, when no patched image is ready yet
+            elif patched_image is None:
+                log(DEBUG, 'No patched image to encode')
+                patched_image_mutex.release()
+                continue
+
+            # Prepare image for streaming
+            return_value, buffer = cv2.imencode('.jpg', patched_image)
+
+            patched_image_mutex.release()
+
+            streamer.streaming_output.write(bytearray(buffer))
+
+            if control.display_mode != DISPLAY.CAMERA:
+                break
 
         else:
 
@@ -1147,6 +1232,9 @@ def main():
 
     live_3d_control = threading.Thread(target = live_3d_control_thread, name = 'live_3d_control', args = [front_pan_tilt, front_lidar, back_pan_tilt, back_lidar, data_reporter])
     live_3d_control.start()
+
+    encoding = threading.Thread(target = encoding_thread, name = 'encoding', args = [])
+    encoding.start()
 
     streaming_control = threading.Thread(target = streaming_control_thread, name = 'streaming_control', args = [])
     streaming_control.start()

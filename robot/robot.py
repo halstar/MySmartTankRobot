@@ -27,6 +27,7 @@ class Robot:
         self.current_speed      = 0.0
         self.target_speed       = 0.0
         self.applied_speed      = 0.0
+        self.sleep_for_period   = 0.0
 
         # Setup IMU
         self.imu_device.reset        ()
@@ -61,6 +62,9 @@ class Robot:
 
         self.turn_angle_order = 0.0
         self.turn_speed_step  = 0.0
+
+    def stop_for_period(self, period):
+        self.sleep_for_period = period
 
     def forward(self, speed):
 
@@ -185,6 +189,8 @@ class Robot:
 
             self.applied_speed = self.speed_pid_controller.update(self.current_speed, DISTANCE_SAMPLES_NB * POSITION_LOOP_TIME_STEP)
 
+            self.applied_speed = self.target_speed
+
             self.left_encoder.reset_counter ()
             self.right_encoder.reset_counter()
 
@@ -263,3 +269,15 @@ class Robot:
 
             if elapsed_time < POSITION_LOOP_TIME_STEP:
                 time.sleep(POSITION_LOOP_TIME_STEP - elapsed_time)
+
+            # ######################################### #
+            # Deal with possible requested sleep period #
+            # ######################################### #
+
+            if self.sleep_for_period != 0.0:
+
+                self.stop()
+                self.left_motor.stop ()
+                self.right_motor.stop()
+                time.sleep(self.sleep_for_period)
+                self.sleep_for_period = 0.0
