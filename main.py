@@ -523,6 +523,10 @@ def run_line_following(robot):
 
     log(INFO, 'Starting line following mode')
 
+    # Deactivate the use of PID as it provides better results
+    # with those little steps with we use this mode
+    robot.use_pid(False)
+
     # ################################ #
     #  Read reference stop and u-turn  #
     # images and shapes, for later use #
@@ -723,6 +727,9 @@ def run_line_following(robot):
                 robot.stop_for_period(0.2)
 
     robot.stop()
+
+    # Restore the use of PID for other modes
+    robot.use_pid(True)
 
 
 def autonomous_mode_thread(robot, front_pan_tilt, front_lidar, back_pan_tilt, back_lidar, data_reporter):

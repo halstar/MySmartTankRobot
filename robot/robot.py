@@ -9,6 +9,7 @@ class Robot:
     def __init__(self, setup_data, speed_pid_controller, left_motor, right_motor, left_encoder, right_encoder, imu_device):
 
         self.speed_pid_controller = speed_pid_controller
+        self.is_pid_in_use        = None
 
         self.left_motor  = left_motor
         self.right_motor = right_motor
@@ -29,6 +30,9 @@ class Robot:
         self.applied_speed      = 0.0
         self.sleep_for_period   = 0.0
 
+        # Start using PID
+        self.use_pid(True)
+
         # Setup IMU
         self.imu_device.reset        ()
         self.imu_device.reset_offsets()
@@ -47,6 +51,15 @@ class Robot:
         self.imu_device.set_x_gyroscope_drift_correction(setup_data['GYROSCOPE_X_DRIFT_CORRECTION'])
         self.imu_device.set_y_gyroscope_drift_correction(setup_data['GYROSCOPE_Y_DRIFT_CORRECTION'])
         self.imu_device.set_z_gyroscope_drift_correction(setup_data['GYROSCOPE_Z_DRIFT_CORRECTION'])
+
+    def use_pid(self, use_pid):
+
+        if use_pid == True:
+            log(DEBUG, 'Robot starting using PID')
+        else:
+            log(DEBUG, 'Robot stopping using PID')
+
+        self.is_pid_in_use = use_pid
 
     def stop(self):
 
@@ -174,22 +187,27 @@ class Robot:
             # Speed control computation #
             # ######################### #
 
-            self.speed_pid_controller.set_target(self.target_speed)
+            if self.is_pid_in_use == False:
 
-            self.left_counter  = self.left_encoder.get_counter()
-            self.right_counter = self.right_encoder.get_counter()
+                self.applied_speed = self.target_speed
 
-            distance_readings.append((self.left_counter + self.right_counter) / 2)
-
-            if len(distance_readings) > DISTANCE_SAMPLES_NB:
-                distance_readings.pop(0)
-                self.current_speed = sum(distance_readings) / SPEED_COMPUTATION_DIVIDER
             else:
-                self.current_speed = self.target_speed
 
-            self.applied_speed = self.speed_pid_controller.update(self.current_speed, DISTANCE_SAMPLES_NB * POSITION_LOOP_TIME_STEP)
+                self.speed_pid_controller.set_target(self.target_speed)
 
-            self.applied_speed = self.target_speed
+                self.left_counter = self.left_encoder.get_counter()
+                self.right_counter = self.right_encoder.get_counter()
+
+                distance_readings.append((self.left_counter + self.right_counter) / 2)
+
+                if len(distance_readings) > DISTANCE_SAMPLES_NB:
+                    distance_readings.pop(0)
+                    self.current_speed = sum(distance_readings) / SPEED_COMPUTATION_DIVIDER
+                else:
+                    self.current_speed = self.target_speed
+
+                self.applied_speed = self.speed_pid_controller.update(self.current_speed,
+                                                                      DISTANCE_SAMPLES_NB * POSITION_LOOP_TIME_STEP)
 
             self.left_encoder.reset_counter ()
             self.right_encoder.reset_counter()
