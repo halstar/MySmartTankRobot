@@ -36,7 +36,7 @@ https://www.youtube.com/playlist?list=PLDA98d1k4czB_mNHSkv1oVTqYg_OaIa2p
 * Setup I2C bus to its maximum speed:
 	
 	* sudo vi /boot/config.txt
-	* dtparam=i2c_arm=on,i2c_arm_baudrate=4000000
+	* dtparam=i2c_arm=on,i2c_arm_baudrate=400000
 	* sudo reboot
 
 * Manually start PIGPIO daemon (add this to rc.local or .bashrc or other):
